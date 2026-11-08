@@ -13,11 +13,14 @@
     "build": "pnpm --filter @prepup/api build",
     "dev": "pnpm --filter @prepup/api dev",
     "db:generate": "pnpm --filter @prepup/db generate",
-    "db:migrate": "pnpm --filter @prepup/db migrate"
+    "db:migrate": "pnpm --filter @prepup/db migrate",
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "dev:web": "pnpm --filter @prepup/web dev"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "typescript": "~5.9.3",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "tsup": "^8.5.1"
   }
 }

@@ -4,7 +4,10 @@ coverage/
 *.log
 .DS_Store
 
-# Secrets never go in git. Copy .env.example to .env locally; use `fly secrets` in production.
+# Secrets never go in git. Copy .env.example to .env locally; use Vercel environment variables in production.
 .env
 .env.*
 !.env.example
+
+# Vercel build output
+.vercel/

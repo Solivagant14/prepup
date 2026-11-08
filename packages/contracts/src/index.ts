@@ -42,7 +42,7 @@ export const ListTopicsInput = z.object({
   filter: TopicFilter.default("all").describe(
     "all = every topic; prep = high importance with score 2 or less; fading_week = drops within 7 days; confident = score 4+",
   ),
-  limit: z.number().int().min(1).max(100).default(20),
+  limit: z.number().int().min(1).max(500).default(20),
 });
 export type ListTopicsInput = z.input<typeof ListTopicsInput>;
 

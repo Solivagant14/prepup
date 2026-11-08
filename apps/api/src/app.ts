@@ -17,6 +17,8 @@ export interface AppOptions {
   publicUrl: string;
   supabaseUrl?: string;
   supabasePublishableKey?: string;
+  /** Tells the web app whether to show Supabase sign-in or use local dev auth. */
+  authMode?: "supabase" | "dev";
 }
 
 type Env = { Variables: { actor: Actor } };
@@ -34,6 +36,16 @@ export function createApp(opts: AppOptions) {
   });
 
   app.get("/health", (c) => c.json({ ok: true }));
+
+  // Public settings the web app needs before sign-in. The publishable key is
+  // designed to be public; nothing secret is returned here.
+  app.get("/app-config", (c) =>
+    c.json({
+      authMode: opts.authMode ?? "supabase",
+      supabaseUrl: opts.supabaseUrl ?? null,
+      supabasePublishableKey: opts.supabasePublishableKey ?? null,
+    }),
+  );
 
   // OAuth protected-resource metadata (RFC 9728): tells Claude which
   // authorization server issues tokens for this API.
@@ -74,7 +86,7 @@ export function createApp(opts: AppOptions) {
 
   const svc = opts.service;
   app.get("/api/topics", async (c) =>
-    c.json(await svc.listTopics(c.var.actor, { filter: c.req.query("filter") ?? "all", limit: Number(c.req.query("limit") ?? 100) })),
+    c.json(await svc.listTopics(c.var.actor, { filter: c.req.query("filter") ?? "all", limit: Number(c.req.query("limit") ?? 500) })),
   );
   app.post("/api/topics", async (c) => {
     const { topic, created } = await svc.addTopic(c.var.actor, await body(c));

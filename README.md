@@ -8,9 +8,9 @@ PrepUp has **no AI of its own**. All testing runs in your own Claude app through
 
 ```mermaid
 flowchart TB
-  web["Web app (M2)<br/>card deck, progress"] -->|HTTPS + JSON| rest
+  web["Web app<br/>card deck, progress"] -->|HTTPS + JSON| rest
   claude["Claude app<br/>your own plan"] -->|MCP tool calls| mcp
-  subgraph api["API service · one container"]
+  subgraph api["API · one Vercel function"]
     rest["REST adapter<br/>/api/*"]
     mcp["MCP adapter<br/>/mcp"]
     core["Core domain<br/>the only place rules live"]
@@ -29,6 +29,8 @@ flowchart TB
 | `packages/core` | Scoring and fade rules (pure functions), `PrepUpService`, the repository port |
 | `packages/db` | Drizzle schema, SQL migrations, the Postgres adapter |
 | `apps/api` | Hono HTTP server: REST routes, the MCP server at `/mcp`, token checks, OAuth consent page |
+| `apps/web` | React + Vite web app: the card deck, progress tracker and card pop-up |
+| `scripts/build-vercel.mjs` | Builds the web app and the API into Vercel's Build Output format |
 | `skills/prepup-coach` | An optional Claude skill that makes testing interview-style |
 
 ## The rules
@@ -47,7 +49,8 @@ flowchart TB
 | Append-only `review_events` | Full history; the fade formula can change without migrating data | Scores are computed on read |
 | Fade computed at read time | No cron job or worker to run | Recomputed per request; trivial at this size |
 | `workspace_id` on every row | Collaboration later is UI work, not a migration | Slightly more setup now |
-| Stateless MCP over Streamable HTTP | A fresh MCP server per request; nothing lost when a machine sleeps | No server-pushed notifications (not needed) |
+| Stateless MCP over Streamable HTTP | A fresh MCP server per request, so it runs as a serverless function | No server-pushed notifications (not needed) |
+| One Vercel project, one domain | Web app as static files, the whole API as one function; free on Hobby | Cold starts (~1 s) after idle |
 | PrepUp as OAuth resource server | Never handles passwords; Supabase issues tokens, we verify them via JWKS | Depends on Supabase's OAuth server (beta) |
 | RLS on, no policies | Supabase's public Data API can read nothing; the server enforces scoping in every query | Policies are needed if a client ever queries Supabase directly |
 
@@ -67,7 +70,8 @@ To run the server against a local Postgres:
 cp .env.example .env               # AUTH_MODE=dev for local use
 docker run -d --name prepup-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=prepup -p 5432:5432 postgres:17
 pnpm db:migrate
-pnpm dev
+pnpm dev           # API on :8080
+pnpm dev:web       # web app on :5173 (proxies API paths to :8080)
 
 # Dev auth trusts this header. Any UUID works as a user id.
 curl -X POST localhost:8080/api/topics \
@@ -75,12 +79,12 @@ curl -X POST localhost:8080/api/topics \
   -H 'content-type: application/json' -d '{"term":"RAG"}'
 ```
 
-Deploying and connecting Claude: see [docs/m0-checklist.md](docs/m0-checklist.md).
+Deploying: see [docs/deploy-vercel.md](docs/deploy-vercel.md). `pnpm build:vercel` produces the same `.vercel/output` Vercel deploys.
 
 ## Roadmap
 
 - **M0** Auth spike: Claude connects to `/mcp` behind a real Supabase login
 - **M1** Core, database and tests
-- **M2** Web app: the card deck
+- **M2** Web app: the card deck, hosted with the API on Vercel
 - **M3** MCP polish and the PrepUp Coach skill, tested end to end from iPhone
 - **M4** Ship: CI deploy, demo video

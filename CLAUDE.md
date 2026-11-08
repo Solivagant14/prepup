@@ -3,7 +3,8 @@
 ## Commands
 
 - `pnpm install` · `pnpm test` · `pnpm typecheck` · `pnpm build`
-- `pnpm dev` runs the API with `.env` (copy `.env.example`)
+- `pnpm dev` runs the API with `.env` (copy `.env.example`); `pnpm dev:web` runs the web app
+- `pnpm build:vercel` builds what Vercel deploys (`.vercel/output`)
 - `pnpm db:generate` after changing `packages/db/src/schema.ts`; commit the generated SQL
 
 ## Architecture rules
@@ -18,7 +19,7 @@
 
 ## Working rules
 
-- Never commit secrets. `.env` is gitignored; production uses `fly secrets`.
+- Never commit secrets. `.env` is gitignored; production uses Vercel environment variables.
 - Never push to `main`; work on a branch and open a PR.
 - Add or update tests with every rule change; `pnpm test` must pass.
 - Don't deploy or run migrations against Supabase unless asked.
