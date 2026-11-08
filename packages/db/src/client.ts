@@ -9,9 +9,9 @@ import type { Db } from "./repository.js";
 export const defaultMigrationsDir = () =>
   process.env.MIGRATIONS_DIR ?? fileURLToPath(new URL("../migrations", import.meta.url));
 
-export function createDb(databaseUrl: string): { db: Db; close: () => Promise<void> } {
+export function createDb(databaseUrl: string, maxConnections = 5): { db: Db; close: () => Promise<void> } {
   // prepare: false keeps this compatible with Supabase's connection pooler.
-  const sql = postgres(databaseUrl, { prepare: false, max: 5 });
+  const sql = postgres(databaseUrl, { prepare: false, max: maxConnections });
   return { db: drizzle(sql, { schema }) as unknown as Db, close: () => sql.end() };
 }
 
