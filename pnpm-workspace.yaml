@@ -1,0 +1,7 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+
+# esbuild works without its install script, but allowing it keeps installs quiet.
+onlyBuiltDependencies:
+  - esbuild
