@@ -16,7 +16,7 @@ import {
 } from "@prepup/contracts";
 import type { z } from "zod";
 import { DomainError } from "./errors.js";
-import type { PrepUpRepository, TopicState } from "./ports.js";
+import type { NewEvent, PrepUpRepository, TopicState } from "./ports.js";
 import { computeScore, levelName, normalizeTerm, priority } from "./scoring.js";
 
 /** Who is acting, and in which workspace. Every call is scoped to this. */
@@ -97,25 +97,27 @@ export class PrepUpService {
 
   /**
    * A Claude test. The only call that resets the fade clock. Claude suggests
-   * the score; the user confirms it in chat before Claude calls this.
+   * the score (and optionally a curated explanation); the user confirms both
+   * in chat before Claude calls this. Score, explanation and history are
+   * saved in one transaction.
    */
   async recordReview(actor: Actor, input: unknown): Promise<TopicView> {
-    const { term, score, explained, feedback, answer } = parse(RecordReviewInput, input);
+    const { term, score, explained, feedback, answer, explanation } = parse(RecordReviewInput, input);
     if (score === 5 && !explained) {
       throw new DomainError("rule", "A score of 5 requires that the user explained the topic clearly (explained: true)");
     }
     const topic = await this.findByTerm(actor, term);
-    await this.repo.appendEvent({
-      workspaceId: actor.workspaceId,
-      topicId: topic.id,
-      userId: actor.userId,
-      kind: "claude_test",
-      score,
-      explained,
-      feedback,
-      text: answer ?? null,
-      source: "mcp",
-      createdAt: this.clock(),
+    const now = this.clock();
+    const event = this.event(actor, topic.id, "mcp", now);
+    const events: NewEvent[] = [{ ...event, kind: "claude_test", score, explained, feedback, text: answer ?? null }];
+    const changesExplanation = explanation !== undefined && explanation !== topic.explanation;
+    if (changesExplanation) {
+      // One millisecond later, so history lists the explanation right after the test that produced it.
+      events.push({ ...event, kind: "explanation", text: explanation, createdAt: new Date(now.getTime() + 1) });
+    }
+    await this.repo.applyChanges({
+      events,
+      ...(changesExplanation ? { settings: { userId: actor.userId, topicId: topic.id, patch: { explanation }, now } } : {}),
     });
     return this.view(actor, topic.id);
   }
@@ -124,17 +126,8 @@ export class PrepUpService {
   async setScore(actor: Actor, topicId: string, input: unknown, source: EventSource): Promise<TopicView> {
     const { score } = parse(SetScoreInput, input);
     await this.view(actor, topicId);
-    await this.repo.appendEvent({
-      workspaceId: actor.workspaceId,
-      topicId,
-      userId: actor.userId,
-      kind: "manual_edit",
-      score,
-      explained: false,
-      feedback: null,
-      text: null,
-      source,
-      createdAt: this.clock(),
+    await this.repo.applyChanges({
+      events: [{ ...this.event(actor, topicId, source, this.clock()), kind: "manual_edit", score }],
     });
     return this.view(actor, topicId);
   }
@@ -143,21 +136,13 @@ export class PrepUpService {
     const patch = parse(UpdateTopicInput, input);
     const before = await this.view(actor, topicId);
     const now = this.clock();
-    await this.repo.upsertSettings(actor.userId, topicId, patch, now);
-    if (patch.explanation !== undefined && patch.explanation !== before.explanation) {
-      await this.repo.appendEvent({
-        workspaceId: actor.workspaceId,
-        topicId,
-        userId: actor.userId,
-        kind: "explanation",
-        score: null,
-        explained: false,
-        feedback: null,
-        text: patch.explanation,
-        source,
-        createdAt: now,
-      });
-    }
+    const changesExplanation = patch.explanation !== undefined && patch.explanation !== before.explanation;
+    await this.repo.applyChanges({
+      settings: { userId: actor.userId, topicId, patch, now },
+      events: changesExplanation
+        ? [{ ...this.event(actor, topicId, source, now), kind: "explanation", text: patch.explanation! }]
+        : [],
+    });
     return this.view(actor, topicId);
   }
 
@@ -186,6 +171,22 @@ export class PrepUpService {
       }));
   }
 
+  /** The fields every event shares; callers set kind and the specifics. */
+  private event(actor: Actor, topicId: string, source: EventSource, at: Date): NewEvent {
+    return {
+      workspaceId: actor.workspaceId,
+      topicId,
+      userId: actor.userId,
+      kind: "manual_edit",
+      score: null,
+      explained: false,
+      feedback: null,
+      text: null,
+      source,
+      createdAt: at,
+    };
+  }
+
   private async view(actor: Actor, topicId: string): Promise<TopicView> {
     const state = await this.repo.getTopicState(actor.workspaceId, actor.userId, topicId);
     if (!state) throw new DomainError("not_found", "Topic not found");
@@ -206,6 +207,8 @@ export function toView(s: TopicState, now: Date): TopicView {
     sourceUrl: s.topic.sourceUrl,
     importance: s.importance,
     explanation: s.explanation,
+    explanationBy: s.lastExplanation ? (s.lastExplanation.source === "mcp" ? "claude" : "you") : null,
+    explanationUpdatedAt: s.lastExplanation?.at.toISOString() ?? null,
     score: state.score,
     level: levelName(state.score),
     createdAt: s.topic.createdAt.toISOString(),

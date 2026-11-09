@@ -55,8 +55,22 @@ export const RecordReviewInput = z.object({
     .describe("True only if the user explained the topic clearly in their own words; required for a score of 5"),
   feedback: z.string().trim().min(1).max(1000).describe("One or two lines on why this score"),
   answer: z.string().trim().max(4000).optional().describe("The user's answer, for their history"),
+  explanation: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1500)
+    .optional()
+    .describe(
+      "Optional, only if the user approved it: their explanation of the topic in their own voice, 2-4 sentences, drawn from their answers and any corrections they accepted. It replaces their saved explanation, so keep the correct points from it (read it with get_topic).",
+    ),
 });
 export type RecordReviewInput = z.input<typeof RecordReviewInput>;
+
+export const GetTopicInput = z.object({
+  term: Term.describe("The topic to read, as it appears in PrepUp"),
+});
+export type GetTopicInput = z.infer<typeof GetTopicInput>;
 
 export const SetScoreInput = z.object({ score: Score });
 export type SetScoreInput = z.infer<typeof SetScoreInput>;
@@ -78,6 +92,9 @@ export interface TopicView {
   sourceUrl: string | null;
   importance: Importance;
   explanation: string;
+  /** Who last wrote the explanation: you in the web app, or Claude after a test. */
+  explanationBy: "you" | "claude" | null;
+  explanationUpdatedAt: string | null;
   score: Score;
   level: (typeof LEVEL_NAMES)[number];
   createdAt: string;

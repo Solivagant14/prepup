@@ -4,7 +4,8 @@
  * can never read or change another workspace's rows through this class.
  */
 import type { Importance, Score } from "@prepup/contracts";
-import type { EventRecord, NewEvent, PrepUpRepository, SettingsPatch, TopicRecord, TopicState } from "@prepup/core";
+import type { ChangeSet, EventRecord, PrepUpRepository, TopicRecord, TopicState } from "@prepup/core";
+import type { EventSource } from "@prepup/contracts";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema.js";
@@ -63,14 +64,22 @@ export class PostgresRepository implements PrepUpRepository {
     return state ?? null;
   }
 
-  async upsertSettings(userId: string, topicId: string, patch: SettingsPatch, now: Date): Promise<void> {
-    await this.db
-      .insert(topicSettings)
-      .values({ userId, topicId, ...patch, updatedAt: now })
-      .onConflictDoUpdate({
-        target: [topicSettings.userId, topicSettings.topicId],
-        set: { ...patch, updatedAt: now },
-      });
+  /** One transaction: the settings change and its events commit together or not at all. */
+  async applyChanges({ settings, events }: ChangeSet): Promise<void> {
+    if (!settings && events.length === 0) return;
+    await this.db.transaction(async (tx) => {
+      if (settings) {
+        const { userId, topicId, patch, now } = settings;
+        await tx
+          .insert(topicSettings)
+          .values({ userId, topicId, ...patch, updatedAt: now })
+          .onConflictDoUpdate({
+            target: [topicSettings.userId, topicSettings.topicId],
+            set: { ...patch, updatedAt: now },
+          });
+      }
+      if (events.length > 0) await tx.insert(reviewEvents).values(events);
+    });
   }
 
   /** Settings and review events go with it through ON DELETE CASCADE. */
@@ -80,10 +89,6 @@ export class PostgresRepository implements PrepUpRepository {
       .where(and(eq(topics.workspaceId, workspaceId), eq(topics.id, topicId)))
       .returning({ id: topics.id });
     return deleted.length > 0;
-  }
-
-  async appendEvent(event: NewEvent): Promise<void> {
-    await this.db.insert(reviewEvents).values(event);
   }
 
   async listEvents(workspaceId: string, userId: string, topicId: string): Promise<EventRecord[]> {
@@ -107,8 +112,9 @@ export class PostgresRepository implements PrepUpRepository {
   }
 
   /**
-   * Topics plus the two facts each score is computed from: the latest scored
-   * event and the latest Claude test. DISTINCT ON keeps one row per topic.
+   * Topics plus the facts each view is computed from: the latest scored event,
+   * the latest Claude test and the latest explanation change. DISTINCT ON
+   * keeps one row per topic.
    */
   private async states(workspaceId: string, userId: string, topicId?: string): Promise<TopicState[]> {
     const topicFilter = topicId
@@ -122,7 +128,7 @@ export class PostgresRepository implements PrepUpRepository {
         topicId ? eq(reviewEvents.topicId, topicId) : undefined,
       );
 
-    const [rows, scored, tested] = await Promise.all([
+    const [rows, scored, tested, explained] = await Promise.all([
       this.db
         .select({ topic: topics, importance: topicSettings.importance, explanation: topicSettings.explanation })
         .from(topics)
@@ -142,16 +148,27 @@ export class PostgresRepository implements PrepUpRepository {
         .from(reviewEvents)
         .where(eventScope(eq(reviewEvents.kind, "claude_test")))
         .orderBy(reviewEvents.topicId, desc(reviewEvents.createdAt)),
+      this.db
+        .selectDistinctOn([reviewEvents.topicId], {
+          topicId: reviewEvents.topicId,
+          at: reviewEvents.createdAt,
+          source: reviewEvents.source,
+        })
+        .from(reviewEvents)
+        .where(eventScope(eq(reviewEvents.kind, "explanation")))
+        .orderBy(reviewEvents.topicId, desc(reviewEvents.createdAt)),
     ]);
 
     const lastScore = new Map(scored.map((s) => [s.topicId, { score: s.score as Score, at: s.at }]));
     const lastTest = new Map(tested.map((t) => [t.topicId, t.at]));
+    const lastExplanation = new Map(explained.map((e) => [e.topicId, { at: e.at, source: e.source as EventSource }]));
     return rows.map((r) => ({
       topic: r.topic,
       importance: (r.importance ?? "medium") as Importance,
       explanation: r.explanation ?? "",
       lastScore: lastScore.get(r.topic.id) ?? null,
       lastTestAt: lastTest.get(r.topic.id) ?? null,
+      lastExplanation: lastExplanation.get(r.topic.id) ?? null,
     }));
   }
 }

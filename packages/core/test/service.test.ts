@@ -130,3 +130,69 @@ describe("PrepUpService", () => {
     expect(again).toMatchObject({ created: true, topic: { score: 1 } });
   });
 });
+
+describe("explanations drafted by Claude", () => {
+  it("saves the approved explanation with the score and marks Claude as the author", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    const saved = await service.recordReview(me, {
+      term: "RAG",
+      score: 3,
+      feedback: "Good on retrieval, missed chunking",
+      answer: "Fetch relevant docs, put them in the prompt",
+      explanation: "RAG is when I fetch the most relevant chunks of my own documents and put them in the prompt.",
+    });
+    expect(saved).toMatchObject({
+      score: 3,
+      explanation: "RAG is when I fetch the most relevant chunks of my own documents and put them in the prompt.",
+      explanationBy: "claude",
+    });
+    const history = await service.history(me, topic.id);
+    expect(history.map((e) => [e.kind, e.source])).toEqual([
+      ["explanation", "mcp"],
+      ["claude_test", "mcp"],
+    ]);
+  });
+
+  it("leaves your own explanation alone when Claude doesn't send one", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "MCP" });
+    await service.updateTopic(me, topic.id, { explanation: "My own words" }, "web");
+    const after = await service.recordReview(me, { term: "MCP", score: 2, feedback: "ok" });
+    expect(after).toMatchObject({ explanation: "My own words", explanationBy: "you" });
+  });
+
+  it("logs nothing extra when the explanation is unchanged", async () => {
+    const { service, advance } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "LoRA" });
+    await service.updateTopic(me, topic.id, { explanation: "Low-rank adapters" }, "web");
+    advance(1 / 24);
+    await service.recordReview(me, { term: "LoRA", score: 2, feedback: "ok", explanation: "Low-rank adapters" });
+    const kinds = (await service.history(me, topic.id)).map((e) => e.kind);
+    expect(kinds).toEqual(["claude_test", "explanation"]);
+    expect((await service.getTopic(me, topic.id)).explanationBy).toBe("you");
+  });
+
+  it("hands authorship back to you when you edit Claude's draft", async () => {
+    const { service, advance } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "Evals" });
+    await service.recordReview(me, { term: "Evals", score: 2, feedback: "ok", explanation: "Evals measure quality." });
+    advance(1 / 24);
+    const edited = await service.updateTopic(me, topic.id, { explanation: "Evals measure quality before shipping." }, "web");
+    expect(edited.explanationBy).toBe("you");
+  });
+
+  it("rejects an over-long explanation without saving the score", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "RLHF" });
+    await expect(
+      service.recordReview(me, { term: "RLHF", score: 3, feedback: "ok", explanation: "x".repeat(1501) }),
+    ).rejects.toMatchObject({ code: "invalid" });
+    expect(await service.history(me, topic.id)).toEqual([]);
+  });
+});

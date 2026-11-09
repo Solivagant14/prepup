@@ -5,7 +5,14 @@
  * Every tool calls the same core service as the REST API.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { AddTopicInput, ListTopicsInput, RecordReviewInput, TOPIC_FILTERS, type TopicView } from "@prepup/contracts";
+import {
+  AddTopicInput,
+  GetTopicInput,
+  ListTopicsInput,
+  RecordReviewInput,
+  TOPIC_FILTERS,
+  type TopicView,
+} from "@prepup/contracts";
 import { DomainError, type Actor, type PrepUpService } from "@prepup/core";
 import { z } from "zod";
 
@@ -18,10 +25,11 @@ Capturing: when the user mentions a term they want to learn, call add_topic. It 
 Testing:
 1. Pick topics with list_topics (use filter "fading_week" or "prep" unless the user names topics).
 2. Ask about one topic at a time, like an interviewer: start open ("explain X"), then one or two follow-ups that probe depth or a real use case.
-3. Suggest a score with a one-line reason. Only suggest 5 if they explained it clearly in their own words.
-4. Ask the user to confirm or change the score. Never call record_review before they confirm.
-5. Call record_review with the confirmed score, then move to the next topic.
-Keep feedback short and specific. Do not reveal the user's saved explanation before they answer.`;
+3. Give short feedback: what was right, what was missing. Suggest a score with a one-line reason. Only suggest 5 if they explained it clearly in their own words.
+4. Draft their explanation for the card: call get_topic to read the one they saved (only now, after they answered), then write 2-4 sentences in their voice ("RAG is when I..."), built from their answers plus any corrections they accepted. Keep the correct points from the saved one. Don't add things they didn't say or agree to.
+5. Show the score and the draft together and ask them to confirm, or change either. They can also say to keep their old explanation.
+6. Call record_review with the confirmed score, and the explanation only if they approved it. Never call it before they confirm. Then move to the next topic.
+Keep feedback short and specific. Never reveal the user's saved explanation before they answer.`;
 
 const toolResult = (summary: string, data: unknown) => ({
   content: [{ type: "text" as const, text: `${summary}\n\n${JSON.stringify(data, null, 2)}` }],
@@ -44,6 +52,8 @@ const brief = (t: TopicView) => ({
   hasExplanation: t.explanation.length > 0,
 });
 
+const WHO = { you: "the user", claude: "Claude, from an earlier test" } as const;
+
 async function guard<T>(fn: () => Promise<T>) {
   try {
     return await fn();
@@ -57,7 +67,7 @@ async function guard<T>(fn: () => Promise<T>) {
 
 export function createMcpServer(service: PrepUpService, actor: Actor): McpServer {
   const server = new McpServer(
-    { name: "prepup", title: "PrepUp", version: "0.1.0" },
+    { name: "prepup", title: "PrepUp", version: "0.2.0" },
     { instructions: SERVER_INSTRUCTIONS, capabilities: { tools: {}, prompts: {} } },
   );
 
@@ -114,18 +124,45 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
   );
 
   server.registerTool(
+    "get_topic",
+    {
+      title: "Read a topic",
+      description:
+        "Read one topic in full, including the user's saved explanation and recent test feedback. During a test, call this only after the user has answered, so you don't prompt them with their own notes.",
+      inputSchema: GetTopicInput,
+      annotations: { readOnlyHint: true },
+    },
+    async ({ term }) =>
+      guard(async () => {
+        const topic = await service.findByTerm(actor, term);
+        const history = await service.history(actor, topic.id);
+        const lastTests = history
+          .filter((e) => e.kind === "claude_test")
+          .slice(0, 3)
+          .map((e) => ({ at: e.createdAt, score: e.score, feedback: e.feedback }));
+        return toolResult(`"${topic.term}": ${topic.score}/5 (${topic.level}).`, {
+          ...brief(topic),
+          explanation: topic.explanation || null,
+          explanationWrittenBy: topic.explanationBy ? WHO[topic.explanationBy] : null,
+          recentTests: lastTests,
+        });
+      }),
+  );
+
+  server.registerTool(
     "record_review",
     {
       title: "Record a test result",
       description:
-        "Save the result of testing the user on a topic. Only call after the user has confirmed the score. Resets the topic's 14-day fade clock. A score of 5 requires explained: true.",
+        "Save the result of testing the user on a topic: the score, and optionally the explanation you drafted for their card. Only call after the user has confirmed both. Resets the topic's 14-day fade clock. A score of 5 requires explained: true.",
       inputSchema: RecordReviewInput,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
     async (input) =>
       guard(async () => {
         const topic = await service.recordReview(actor, input);
-        return toolResult(`Saved: "${topic.term}" is now ${topic.score}/5 (${topic.level}).`, brief(topic));
+        const note = input.explanation ? " Their explanation was updated." : "";
+        return toolResult(`Saved: "${topic.term}" is now ${topic.score}/5 (${topic.level}).${note}`, brief(topic));
       }),
   );
 
@@ -145,7 +182,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
           role: "user",
           content: {
             type: "text",
-            text: `Test me on ${count ?? "5"} of my PrepUp topics (filter: ${focus ?? "fading_week"}; if that returns nothing, use "prep", then "all"). Follow the PrepUp testing steps: one topic at a time, interviewer-style follow-ups, suggest a score, wait for my confirmation, then record it.`,
+            text: `Test me on ${count ?? "5"} of my PrepUp topics (filter: ${focus ?? "fading_week"}; if that returns nothing, use "prep", then "all"). Follow the PrepUp testing steps: one topic at a time, interviewer-style follow-ups, then suggest a score and a draft of my explanation in my own words, wait for my confirmation, then record both.`,
           },
         },
       ],

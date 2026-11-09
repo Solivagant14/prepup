@@ -144,13 +144,15 @@ describe("MCP", () => {
       clientInfo: { name: "test", version: "1" },
     });
     expect(res.result.serverInfo.name).toBe("prepup");
-    expect(res.result.instructions).toMatch(/Never call record_review before they confirm/);
+    expect(res.result.instructions).toMatch(/Never call it before they confirm/);
+    expect(res.result.instructions).toMatch(/Never reveal the user's saved explanation before they answer/);
   });
 
   it("lists the tools and prompts", async () => {
     const tools = await mcp(USER, "tools/list");
     expect(tools.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
       "add_topic",
+      "get_topic",
       "list_topics",
       "record_review",
       "whoami",
@@ -178,6 +180,37 @@ describe("MCP", () => {
 
     const rest = (await (await app.request("/api/topics", as(USER))).json()) as Array<{ term: string; score: number }>;
     expect(rest).toMatchObject([{ term: "Speculative decoding", score: 3 }]);
+  });
+
+  it("runs a full test: reads the saved explanation after the answer, then saves score and draft together", async () => {
+    await mcp(USER, "tools/call", { name: "add_topic", arguments: { term: "Vector databases" } });
+    const topics = (await (await app.request("/api/topics", as(USER))).json()) as Array<{ id: string }>;
+    await app.request(
+      `/api/topics/${topics[0]!.id}`,
+      as(USER, { method: "PATCH", body: JSON.stringify({ explanation: "Stores embeddings." }) }),
+    );
+
+    const read = await mcp(USER, "tools/call", { name: "get_topic", arguments: { term: "vector databases" } });
+    const readText = read.result.content[0].text as string;
+    expect(readText).toContain('"explanation": "Stores embeddings."');
+    expect(readText).toContain('"explanationWrittenBy": "the user"');
+
+    const saved = await mcp(USER, "tools/call", {
+      name: "record_review",
+      arguments: {
+        term: "Vector databases",
+        score: 3,
+        feedback: "Knows ANN search, unsure about HNSW",
+        explanation: "A vector database stores embeddings and finds the nearest ones to a query fast, using approximate search.",
+      },
+    });
+    expect(saved.result.content[0].text).toMatch(/now 3\/5.*explanation was updated/s);
+
+    const card = (await (await app.request(`/api/topics/${topics[0]!.id}`, as(USER))).json()) as {
+      explanation: string;
+      explanationBy: string;
+    };
+    expect(card).toMatchObject({ explanationBy: "claude", explanation: expect.stringContaining("nearest ones") });
   });
 
   it("rejects bad tool input instead of saving it", async () => {
