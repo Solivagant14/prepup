@@ -1,3 +1,4 @@
+import { OAUTH_PROVIDERS } from "@prepup/contracts";
 import { z } from "zod";
 
 const Config = z
@@ -16,6 +17,12 @@ const Config = z
       .transform((u) => u.replace(/\/+$/, ""))
       .optional(),
     SUPABASE_PUBLISHABLE_KEY: z.string().optional(),
+    // Comma-separated social sign-in buttons to show, e.g. "google,github". Empty = email only.
+    AUTH_PROVIDERS: z
+      .string()
+      .default("")
+      .transform((s) => [...new Set(s.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean))])
+      .pipe(z.array(z.enum(OAUTH_PROVIDERS))),
   })
   .superRefine((c, ctx) => {
     if (c.AUTH_MODE === "dev" && c.NODE_ENV === "production") {

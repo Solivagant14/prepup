@@ -14,6 +14,7 @@ export function bootstrap(config: Config) {
     auth,
     publicUrl: config.PUBLIC_URL,
     authMode: config.AUTH_MODE,
+    oauthProviders: config.AUTH_PROVIDERS,
     ...(config.SUPABASE_URL ? { supabaseUrl: config.SUPABASE_URL } : {}),
     ...(config.SUPABASE_PUBLISHABLE_KEY ? { supabasePublishableKey: config.SUPABASE_PUBLISHABLE_KEY } : {}),
   });

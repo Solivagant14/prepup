@@ -1,10 +1,12 @@
 /** A thin client for the PrepUp REST API. Every call carries the signed-in user's token. */
-import type { ReviewEventView, TopicView } from "@prepup/contracts";
+import type { OAuthProvider, ReviewEventView, TopicView } from "@prepup/contracts";
 
 export interface AppConfig {
   authMode: "supabase" | "dev";
   supabaseUrl: string | null;
   supabasePublishableKey: string | null;
+  /** Social sign-in buttons to show; empty means email and password only. */
+  providers: OAuthProvider[];
 }
 
 /** Local development user, used only when the API runs with AUTH_MODE=dev. */

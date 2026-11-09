@@ -248,6 +248,7 @@ describe("deployment glue", () => {
       authMode: "supabase",
       supabaseUrl: SUPABASE_URL,
       supabasePublishableKey: "sb_publishable_test",
+      providers: [],
     });
   });
 
@@ -259,5 +260,35 @@ describe("deployment glue", () => {
     );
     expect(restorePath("/mcp")).toBe("/mcp");
     expect(restorePath(undefined)).toBe("/");
+  });
+});
+
+describe("social sign-in", () => {
+  it("reads AUTH_PROVIDERS leniently but rejects unknown providers", () => {
+    const base = { DATABASE_URL: "postgres://x", SUPABASE_URL };
+    expect(loadConfig({ ...base, AUTH_PROVIDERS: " Google, github,,google " }).AUTH_PROVIDERS).toEqual(["google", "github"]);
+    expect(loadConfig(base).AUTH_PROVIDERS).toEqual([]);
+    expect(() => loadConfig({ ...base, AUTH_PROVIDERS: "facebook" })).toThrow(/AUTH_PROVIDERS/);
+  });
+
+  it("shows only the configured buttons, and keeps the consent page's CSP strict", async () => {
+    const withSocial = createApp({
+      service: new PrepUpService(new InMemoryRepository()),
+      auth: new DevAuthenticator(),
+      publicUrl: PUBLIC_URL,
+      supabaseUrl: SUPABASE_URL,
+      supabasePublishableKey: "sb_publishable_test",
+      oauthProviders: ["google", "github"],
+    });
+    expect(await (await withSocial.request("/app-config")).json()).toMatchObject({ providers: ["google", "github"] });
+
+    const html = await (await withSocial.request("/oauth/consent?authorization_id=abc")).text();
+    expect(html).toContain('data-provider="google"');
+    expect(html).toContain('data-provider="github"');
+    expect(html).toContain("redirectTo: location.href");
+    expect(html).not.toMatch(/ style="/);
+
+    const plain = await (await app.request("/oauth/consent?authorization_id=abc")).text();
+    expect(plain).not.toContain("data-provider=");
   });
 });
