@@ -1,11 +1,20 @@
+import type { OAuthProvider } from "@prepup/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useState, type FormEvent } from "react";
+import { ProviderIcon, PROVIDER_LABEL } from "./ProviderIcon.js";
 
-export function SignIn({ supabase }: { supabase: SupabaseClient }) {
+export function SignIn({ supabase, providers }: { supabase: SupabaseClient; providers: OAuthProvider[] }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Leaves for Google or GitHub; Supabase brings you back here signed in.
+  async function social(provider: OAuthProvider) {
+    setMessage(null);
+    const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
+    if (error) setMessage(error.message);
+  }
 
   async function submit(mode: "in" | "up", e?: FormEvent) {
     e?.preventDefault();
@@ -26,6 +35,17 @@ export function SignIn({ supabase }: { supabase: SupabaseClient }) {
         <p className="muted" style={{ margin: 0 }}>
           Sign in with the account you use for the Claude connector.
         </p>
+        {providers.length > 0 && (
+          <>
+            {providers.map((p) => (
+              <button key={p} type="button" className="btn social" onClick={() => void social(p)}>
+                <ProviderIcon provider={p} />
+                {PROVIDER_LABEL[p]}
+              </button>
+            ))}
+            <div className="divider">or with email</div>
+          </>
+        )}
         <label>
           Email
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />

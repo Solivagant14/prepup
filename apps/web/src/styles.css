@@ -143,3 +143,7 @@ textarea.explanation { width: 100%; padding: 12px 14px; border: 1px solid var(--
 .auth .row { display: flex; gap: 8px; }
 .auth .row .btn { flex: 1; height: 44px; }
 .error { color: var(--rose); font-size: 13px; }
+.auth .social { display: flex; align-items: center; justify-content: center; gap: 10px; height: 44px; width: 100%; }
+.auth .social:hover { border-color: #a1a1aa; }
+.divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }

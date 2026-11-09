@@ -18,6 +18,10 @@ export const TOPIC_FILTERS = ["all", "prep", "fading_week", "confident"] as cons
 export const TopicFilter = z.enum(TOPIC_FILTERS);
 export type TopicFilter = z.infer<typeof TopicFilter>;
 
+/** Social sign-in providers the login screens can offer (each must also be enabled in Supabase). */
+export const OAUTH_PROVIDERS = ["google", "github"] as const;
+export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
+
 export const EVENT_KINDS = ["claude_test", "manual_edit", "explanation"] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
