@@ -197,3 +197,25 @@ describe("MCP error handling", () => {
     expect(text).not.toContain("secrets");
   });
 });
+
+describe("deployment glue", () => {
+  it("serves public config without auth and without secrets", async () => {
+    const res = await app.request("/app-config");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      authMode: "supabase",
+      supabaseUrl: SUPABASE_URL,
+      supabasePublishableKey: "sb_publishable_test",
+    });
+  });
+
+  it("restores the original path Vercel passes to the function", async () => {
+    const { restorePath } = await import("../src/vercel-path.js");
+    expect(restorePath("/server?__path=/api/topics&limit=5")).toBe("/api/topics?limit=5");
+    expect(restorePath("/server?__path=/.well-known/oauth-protected-resource/mcp")).toBe(
+      "/.well-known/oauth-protected-resource/mcp",
+    );
+    expect(restorePath("/mcp")).toBe("/mcp");
+    expect(restorePath(undefined)).toBe("/");
+  });
+});
