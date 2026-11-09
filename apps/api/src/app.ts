@@ -4,6 +4,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import type { OAuthProvider } from "@prepup/contracts";
 import { DomainError, type Actor, type PrepUpService } from "@prepup/core";
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -19,6 +20,8 @@ export interface AppOptions {
   supabasePublishableKey?: string;
   /** Tells the web app whether to show Supabase sign-in or use local dev auth. */
   authMode?: "supabase" | "dev";
+  /** Social sign-in buttons to show on the web app and consent page. */
+  oauthProviders?: OAuthProvider[];
 }
 
 type Env = { Variables: { actor: Actor } };
@@ -44,6 +47,7 @@ export function createApp(opts: AppOptions) {
       authMode: opts.authMode ?? "supabase",
       supabaseUrl: opts.supabaseUrl ?? null,
       supabasePublishableKey: opts.supabasePublishableKey ?? null,
+      providers: opts.oauthProviders ?? [],
     }),
   );
 
@@ -67,7 +71,7 @@ export function createApp(opts: AppOptions) {
     c.header("Content-Security-Policy", consentCsp(opts.supabaseUrl, nonce));
     c.header("Referrer-Policy", "no-referrer");
     c.header("X-Content-Type-Options", "nosniff");
-    return c.html(consentPage(opts.supabaseUrl, opts.supabasePublishableKey, nonce));
+    return c.html(consentPage(opts.supabaseUrl, opts.supabasePublishableKey, nonce, opts.oauthProviders ?? []));
   });
 
   // Everything below needs a valid token. A 401 carries the metadata URL so

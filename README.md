@@ -80,7 +80,7 @@ curl -X POST localhost:8080/api/topics \
   -H 'content-type: application/json' -d '{"term":"RAG"}'
 ```
 
-Deploying: see [docs/deploy-vercel.md](docs/deploy-vercel.md). `pnpm build:vercel` produces the same `.vercel/output` Vercel deploys.
+Deploying: see [docs/deploy-vercel.md](docs/deploy-vercel.md). Google and GitHub sign-in: [docs/social-login.md](docs/social-login.md). `pnpm build:vercel` produces the same `.vercel/output` Vercel deploys.
 
 ## Roadmap
 

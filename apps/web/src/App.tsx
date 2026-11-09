@@ -1,4 +1,5 @@
 /** Loads the public config, handles sign-in, then shows the deck. */
+import type { OAuthProvider } from "@prepup/contracts";
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
 import { Deck } from "./components/Deck.js";
@@ -20,10 +21,16 @@ export function App() {
   if (!config.supabaseUrl || !config.supabasePublishableKey) {
     return <p className="auth error">PrepUp isn't configured yet (missing Supabase settings).</p>;
   }
-  return <SupabaseApp url={config.supabaseUrl} publishableKey={config.supabasePublishableKey} />;
+  return (
+    <SupabaseApp
+      url={config.supabaseUrl}
+      publishableKey={config.supabasePublishableKey}
+      providers={config.providers ?? []}
+    />
+  );
 }
 
-function SupabaseApp({ url, publishableKey }: { url: string; publishableKey: string }) {
+function SupabaseApp({ url, publishableKey, providers }: { url: string; publishableKey: string; providers: OAuthProvider[] }) {
   const supabase = useMemo<SupabaseClient>(() => createClient(url, publishableKey), [url, publishableKey]);
   const [session, setSession] = useState<Session | null | undefined>(undefined);
 
@@ -43,6 +50,6 @@ function SupabaseApp({ url, publishableKey }: { url: string; publishableKey: str
   );
 
   if (session === undefined) return null;
-  if (!session) return <SignIn supabase={supabase} />;
+  if (!session) return <SignIn supabase={supabase} providers={providers} />;
   return <Deck api={api} onSignOut={() => void supabase.auth.signOut()} />;
 }
