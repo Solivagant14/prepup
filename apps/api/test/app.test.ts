@@ -119,6 +119,15 @@ describe("REST", () => {
     expect((await app.request(`/api/topics/${topic.id}`, as(OTHER))).status).toBe(404);
   });
 
+  it("deletes a topic for its owner only", async () => {
+    const created = await app.request("/api/topics", as(USER, { method: "POST", body: JSON.stringify({ term: "LoRA" }) }));
+    const { id } = (await created.json()) as { id: string };
+    expect((await app.request(`/api/topics/${id}`, as(OTHER, { method: "DELETE" }))).status).toBe(404);
+    const res = await app.request(`/api/topics/${id}`, as(USER, { method: "DELETE" }));
+    expect(await res.json()).toEqual({ deleted: { term: "LoRA" } });
+    expect((await app.request(`/api/topics/${id}`, as(USER))).status).toBe(404);
+  });
+
   it("returns readable validation errors", async () => {
     const res = await app.request("/api/topics", as(USER, { method: "POST", body: JSON.stringify({ term: "" }) }));
     expect(res.status).toBe(400);

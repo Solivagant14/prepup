@@ -38,7 +38,7 @@ function parse<T extends z.ZodType>(schema: T, input: unknown): z.output<T> {
 
 const FILTERS: Record<TopicFilter, (t: TopicView) => boolean> = {
   all: () => true,
-  prep: (t) => t.importance === "high" && t.score <= 2,
+  prep: (t) => t.score <= 2,
   fading_week: (t) => t.fadingThisWeek,
   confident: (t) => t.score >= 4,
 };
@@ -159,6 +159,14 @@ export class PrepUpService {
       });
     }
     return this.view(actor, topicId);
+  }
+
+  /** Permanently removes a topic and its history from the workspace. */
+  async deleteTopic(actor: Actor, topicId: string): Promise<{ term: string }> {
+    const topic = await this.view(actor, topicId);
+    const deleted = await this.repo.deleteTopic(actor.workspaceId, topicId);
+    if (!deleted) throw new DomainError("not_found", "Topic not found");
+    return { term: topic.term };
   }
 
   async history(actor: Actor, topicId: string): Promise<ReviewEventView[]> {

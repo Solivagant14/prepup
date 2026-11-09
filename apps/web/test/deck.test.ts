@@ -47,18 +47,19 @@ describe("cardLook", () => {
 describe("filters and summary", () => {
   const deck = [
     topic({ id: "a", importance: "high", score: 1 }),
+    topic({ id: "d", importance: "low", score: 2 }),
     topic({ id: "b", importance: "high", score: 4, daysUntilDrop: 5, fadingThisWeek: true }),
     topic({ id: "c", importance: "low", score: 5, daysUntilDrop: 12 }),
   ];
 
   it("matches the four tabs", () => {
-    expect(deck.filter((t) => matches("prep", t)).map((t) => t.id)).toEqual(["a"]);
+    expect(deck.filter((t) => matches("prep", t)).map((t) => t.id)).toEqual(["a", "d"]);
     expect(deck.filter((t) => matches("fading_week", t)).map((t) => t.id)).toEqual(["b"]);
     expect(deck.filter((t) => matches("confident", t)).map((t) => t.id)).toEqual(["b", "c"]);
   });
 
   it("summarizes progress", () => {
-    expect(summarize(deck)).toMatchObject({ total: 3, confident: 2, confidentPct: 67, prep: 1, fadingWeek: 1 });
+    expect(summarize(deck)).toMatchObject({ total: 4, confident: 2, confidentPct: 50, prep: 2, fadingWeek: 1 });
     expect(summarize([]).confidentPct).toBe(0);
   });
 

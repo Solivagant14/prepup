@@ -63,16 +63,16 @@ export function cardLook(t: Pick<TopicView, "score" | "daysUntilDrop" | "fadingS
 
 export type Tab = "all" | "prep" | "fading_week" | "confident";
 
-export const TABS: { id: Tab; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "prep", label: "Prep now" },
-  { id: "fading_week", label: "Fading this week" },
-  { id: "confident", label: "Confident" },
+export const TABS: { id: Tab; label: string; hint: string }[] = [
+  { id: "all", label: "All", hint: "Every topic, most urgent first. The darker your deck, the more you know." },
+  { id: "prep", label: "Prep now", hint: "Your weakest topics (score 1–2), most important first." },
+  { id: "fading_week", label: "Fading this week", hint: "Drops a level within 7 days unless Claude tests you on it." },
+  { id: "confident", label: "Confident", hint: "Topics at 4 or 5." },
 ];
 
 const MATCH: Record<Tab, (t: TopicView) => boolean> = {
   all: () => true,
-  prep: (t) => t.importance === "high" && t.score <= 2,
+  prep: (t) => t.score <= 2,
   fading_week: (t) => t.fadingThisWeek,
   confident: (t) => t.score >= 4,
 };

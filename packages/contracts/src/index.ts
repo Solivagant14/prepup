@@ -40,7 +40,7 @@ export type AddTopicInput = z.infer<typeof AddTopicInput>;
 
 export const ListTopicsInput = z.object({
   filter: TopicFilter.default("all").describe(
-    "all = every topic; prep = high importance with score 2 or less; fading_week = drops within 7 days; confident = score 4+",
+    "all = every topic; prep = weakest topics (score 1-2), most important first; fading_week = drops within 7 days; confident = score 4+",
   ),
   limit: z.number().int().min(1).max(500).default(20),
 });

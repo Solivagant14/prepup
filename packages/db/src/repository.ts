@@ -73,6 +73,15 @@ export class PostgresRepository implements PrepUpRepository {
       });
   }
 
+  /** Settings and review events go with it through ON DELETE CASCADE. */
+  async deleteTopic(workspaceId: string, topicId: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(topics)
+      .where(and(eq(topics.workspaceId, workspaceId), eq(topics.id, topicId)))
+      .returning({ id: topics.id });
+    return deleted.length > 0;
+  }
+
   async appendEvent(event: NewEvent): Promise<void> {
     await this.db.insert(reviewEvents).values(event);
   }

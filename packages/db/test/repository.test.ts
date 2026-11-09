@@ -106,4 +106,15 @@ describe("PostgresRepository", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("cascades a delete to settings and review events", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const { topic } = await service.addTopic(me, { term: "Evals" });
+    await service.updateTopic(me, topic.id, { importance: "high", explanation: "Measure it" }, "web");
+    await service.recordReview(me, { term: "Evals", score: 2, feedback: "ok" });
+    await service.deleteTopic(me, topic.id);
+    expect(await db.select().from(schema.topics)).toHaveLength(0);
+    expect(await db.select().from(schema.topicSettings)).toHaveLength(0);
+    expect(await db.select().from(schema.reviewEvents)).toHaveLength(0);
+  });
 });
