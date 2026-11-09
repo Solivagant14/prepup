@@ -22,6 +22,8 @@ export interface TopicState {
   explanation: string;
   lastScore: { score: Score; at: Date } | null;
   lastTestAt: Date | null;
+  /** The latest explanation change and where it came from. */
+  lastExplanation: { at: Date; source: EventSource } | null;
 }
 
 export interface NewEvent {
@@ -46,6 +48,16 @@ export interface SettingsPatch {
   explanation?: string;
 }
 
+/**
+ * One unit of work: a settings change and the events that record it are
+ * saved together or not at all, so a score never lands without its
+ * explanation (or the other way round).
+ */
+export interface ChangeSet {
+  settings?: { userId: string; topicId: string; patch: SettingsPatch; now: Date };
+  events: NewEvent[];
+}
+
 export interface PrepUpRepository {
   /** Returns the user's personal workspace id, creating it on first use. */
   ensurePersonalWorkspace(userId: string, now: Date): Promise<string>;
@@ -57,11 +69,11 @@ export interface PrepUpRepository {
   listTopicStates(workspaceId: string, userId: string): Promise<TopicState[]>;
   getTopicState(workspaceId: string, userId: string, topicId: string): Promise<TopicState | null>;
 
-  upsertSettings(userId: string, topicId: string, patch: SettingsPatch, now: Date): Promise<void>;
+  /** Applies the settings change and appends the events atomically. */
+  applyChanges(changes: ChangeSet): Promise<void>;
 
   /** Deletes the topic with its settings and history. Returns false if it isn't in this workspace. */
   deleteTopic(workspaceId: string, topicId: string): Promise<boolean>;
 
-  appendEvent(event: NewEvent): Promise<void>;
   listEvents(workspaceId: string, userId: string, topicId: string): Promise<EventRecord[]>;
 }

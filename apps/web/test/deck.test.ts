@@ -1,6 +1,6 @@
 import type { TopicView } from "@prepup/contracts";
 import { describe, expect, it } from "vitest";
-import { cardLook, freshnessText, matches, mix, prefersLightText, RAMP, summarize } from "../src/lib/deck.js";
+import { cardLook, eventLabel, explanationNote, freshnessText, matches, mix, prefersLightText, RAMP, summarize } from "../src/lib/deck.js";
 
 const topic = (over: Partial<TopicView>): TopicView => ({
   id: "t",
@@ -8,6 +8,8 @@ const topic = (over: Partial<TopicView>): TopicView => ({
   sourceUrl: null,
   importance: "medium",
   explanation: "",
+  explanationBy: null,
+  explanationUpdatedAt: null,
   score: 1,
   level: "Shaky",
   createdAt: "2026-11-01T00:00:00Z",
@@ -67,5 +69,24 @@ describe("filters and summary", () => {
     expect(freshnessText(topic({ score: 4, daysUntilDrop: 10 }))).toBe("Fresh for 10 more days");
     expect(freshnessText(topic({ score: 4, daysUntilDrop: 1, fadingSoon: true }))).toBe("Drops to Getting there in 1 day");
     expect(freshnessText(topic({ score: 1 }))).toBeNull();
+  });
+});
+
+describe("explanation authorship", () => {
+  const now = Date.parse("2026-11-10T12:00:00Z");
+  it("says who wrote the explanation", () => {
+    expect(explanationNote({ explanationBy: "claude", explanationUpdatedAt: "2026-11-08T09:00:00Z" }, now)).toBe(
+      "Drafted by Claude from your test · 2 days ago",
+    );
+    expect(explanationNote({ explanationBy: "you", explanationUpdatedAt: "2026-11-10T09:00:00Z" }, now)).toBe(
+      "Edited by you · today",
+    );
+    expect(explanationNote({ explanationBy: null, explanationUpdatedAt: null }, now)).toBeNull();
+  });
+
+  it("labels history entries by source", () => {
+    expect(eventLabel({ kind: "explanation", source: "mcp" })).toBe("Explanation drafted by Claude");
+    expect(eventLabel({ kind: "explanation", source: "web" })).toBe("Explanation edited");
+    expect(eventLabel({ kind: "claude_test", source: "mcp" })).toBe("Claude test");
   });
 });

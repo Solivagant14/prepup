@@ -3,9 +3,7 @@ import type { Importance, TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { Api } from "../lib/api.js";
-import { cardLook, daysAgo, freshnessText, IMPORTANCES, testPrompt } from "../lib/deck.js";
-
-const KIND_LABEL = { claude_test: "Claude test", manual_edit: "Manual edit", explanation: "Explanation updated" };
+import { cardLook, daysAgo, eventLabel, explanationNote, freshnessText, IMPORTANCES, testPrompt } from "../lib/deck.js";
 
 interface Props {
   api: Api;
@@ -161,11 +159,19 @@ export function TopicDialog({ api, topic, onClose, onDeleted }: Props) {
         </div>
 
         <div className="field">
-          <label className="field-label" htmlFor="explanation">
-            Your explanation
-          </label>
+          <div className="fresh-row">
+            <label className="field-label" htmlFor="explanation">
+              Your explanation
+            </label>
+            {explanationNote(topic) && (
+              <span className="small" id="explanation-note">
+                {explanationNote(topic)}
+              </span>
+            )}
+          </div>
           <textarea
             id="explanation"
+            aria-describedby={topic.explanationBy ? "explanation-note" : undefined}
             className="explanation"
             rows={4}
             maxLength={4000}
@@ -183,7 +189,7 @@ export function TopicDialog({ api, topic, onClose, onDeleted }: Props) {
                 <li key={e.id}>
                   <time dateTime={e.createdAt}>{daysAgo(e.createdAt)}</time>
                   <span>
-                    {KIND_LABEL[e.kind]}
+                    {eventLabel(e)}
                     {e.score !== null && ` · ${e.score}/5`}
                     {e.feedback && <span className="muted"> · {e.feedback}</span>}
                   </span>

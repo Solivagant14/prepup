@@ -4,7 +4,7 @@
  * it slowly pales toward the level below; the countdown bar appears only in
  * the last 3 days before a drop.
  */
-import type { Importance, TopicView } from "@prepup/contracts";
+import type { Importance, ReviewEventView, TopicView } from "@prepup/contracts";
 
 export const LEVELS = ["Shaky", "Learning", "Getting there", "Confident", "Can explain"] as const;
 export const RAMP = ["#EEF0FF", "#C9CEFC", "#A5ACF8", "#4F46E5", "#312E81"] as const;
@@ -116,3 +116,16 @@ export const testPrompt = (term: string) =>
   `Use PrepUp to test me on "${term}" like an FDE interviewer, then suggest a score for me to confirm.`;
 
 export const IMPORTANCES: Importance[] = ["high", "medium", "low"];
+
+/** Says who wrote the current explanation, so a Claude-curated one is never mistaken for your own typing. */
+export function explanationNote(t: Pick<TopicView, "explanationBy" | "explanationUpdatedAt">, now = Date.now()): string | null {
+  if (!t.explanationBy || !t.explanationUpdatedAt) return null;
+  const when = daysAgo(t.explanationUpdatedAt, now);
+  return t.explanationBy === "claude" ? `Drafted by Claude from your test · ${when}` : `Edited by you · ${when}`;
+}
+
+export function eventLabel(e: Pick<ReviewEventView, "kind" | "source">): string {
+  if (e.kind === "claude_test") return "Claude test";
+  if (e.kind === "manual_edit") return "Manual edit";
+  return e.source === "mcp" ? "Explanation drafted by Claude" : "Explanation edited";
+}

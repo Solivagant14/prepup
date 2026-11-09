@@ -117,4 +117,46 @@ describe("PostgresRepository", () => {
     expect(await db.select().from(schema.topicSettings)).toHaveLength(0);
     expect(await db.select().from(schema.reviewEvents)).toHaveLength(0);
   });
+
+  it("saves a test and its drafted explanation in one transaction", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    const saved = await service.recordReview(me, {
+      term: "RAG",
+      score: 3,
+      feedback: "ok",
+      explanation: "RAG is when I retrieve my own documents and add them to the prompt.",
+    });
+    expect(saved).toMatchObject({ explanationBy: "claude", explanation: expect.stringContaining("retrieve") });
+    expect(await db.select().from(schema.reviewEvents)).toHaveLength(2);
+    expect(topic.explanationBy).toBeNull();
+  });
+
+  it("rolls the whole change back if any part fails", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const { topic } = await service.addTopic(me, { term: "MCP" });
+    const repo = new PostgresRepository(db);
+    const now = new Date();
+    await expect(
+      repo.applyChanges({
+        settings: { userId: me.userId, topicId: topic.id, patch: { explanation: "should not stick" }, now },
+        events: [
+          {
+            workspaceId: me.workspaceId,
+            topicId: topic.id,
+            userId: me.userId,
+            kind: "claude_test",
+            score: 5,
+            explained: false, // violates the database's "a 5 must be earned" check
+            feedback: null,
+            text: null,
+            source: "mcp",
+            createdAt: now,
+          },
+        ],
+      }),
+    ).rejects.toThrow();
+    expect(await db.select().from(schema.topicSettings)).toHaveLength(0);
+    expect((await service.getTopic(me, topic.id)).explanation).toBe("");
+  });
 });

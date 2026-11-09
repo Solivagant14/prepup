@@ -39,6 +39,7 @@ flowchart TB
 - **Fading.** A score drops one step every 14 days without a Claude test. Only a Claude test (`record_review`) resets that clock.
 - **Manual edits** change the score you see, but the clock keeps running, and the edit is labelled in history.
 - **A 5 must be earned.** `record_review` rejects a 5 unless `explained: true`, and the database enforces it too.
+- **Claude can draft your explanation.** After a test, Claude writes the card's explanation in your voice from your answers. It's saved only if you approve it, in the same transaction as the score, and the card shows that Claude drafted it.
 - **Duplicates merge.** "LangChain", "lang chain" and "Lang-Chain" are one card.
 
 ## Design decisions

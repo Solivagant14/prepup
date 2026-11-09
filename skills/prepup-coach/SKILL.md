@@ -29,13 +29,16 @@ Only suggest 5 when they explained it clearly in their own words. Pass `explaine
    - A trade-off or failure mode ("When does RAG give worse answers than fine-tuning?")
    - A deployment scenario ("A customer's chatbot cites outdated policies. What do you check?")
 5. Give two or three lines of feedback: what was right, what was missing.
-6. Suggest a score with a one-line reason, then ask: "Save as N/5, or change it?"
-7. Wait for their answer. Only then call `record_review` with the confirmed score, a one-line `feedback`, and their `answer` summarised in a sentence or two.
-8. Move to the next topic. At the end, give a two-line summary: what moved up, and the one topic to revisit first.
+6. Suggest a score with a one-line reason.
+7. Draft their card's explanation. Call `get_topic` now (never earlier) to read the one they saved. Write 2-4 sentences in their voice ("RAG is when I..."), built from their answers plus corrections they accepted during feedback, keeping the correct points from the saved one. Don't add ideas they didn't say or agree to; the card should show what they actually know.
+8. Show both and ask: "Save as N/5 with this explanation? You can change either, or keep your old explanation."
+9. Wait for their answer. Only then call `record_review` with the confirmed score, a one-line `feedback`, their `answer` summarised in a sentence or two, and `explanation` only if they approved it.
+10. Move to the next topic. At the end, give a two-line summary: what moved up, and the one topic to revisit first.
 
 ## Rules
 
-- Never call `record_review` without the user confirming the score.
+- Never call `record_review` without the user confirming the score (and the explanation, if you're saving one).
+- Never show their saved explanation before they've answered.
 - Keep each turn short; one question at a time.
 - If they say "skip", move on without recording anything.
 - If a term is not in PrepUp yet, offer to add it with `add_topic`.
