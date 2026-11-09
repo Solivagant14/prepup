@@ -91,8 +91,8 @@ export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
             </button>
           ))}
         </div>
-        <span className="toolbar-note">The darker your deck, the more you know</span>
       </div>
+      <p className="tab-hint">{TABS.find((t) => t.id === tab)!.hint}</p>
 
       {topics.isLoading ? (
         <p className="muted">Loading your deck…</p>
@@ -110,7 +110,14 @@ export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
         </div>
       )}
 
-      {open && <TopicDialog api={api} topic={open} onClose={() => setOpenId(null)} />}
+      {open && (
+        <TopicDialog
+          api={api}
+          topic={open}
+          onClose={() => setOpenId(null)}
+          onDeleted={(term) => setStatus({ text: `Deleted "${term}"` })}
+        />
+      )}
     </div>
   );
 }

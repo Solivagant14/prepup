@@ -7,13 +7,21 @@ import { cardLook, daysAgo, freshnessText, IMPORTANCES, testPrompt } from "../li
 
 const KIND_LABEL = { claude_test: "Claude test", manual_edit: "Manual edit", explanation: "Explanation updated" };
 
-export function TopicDialog({ api, topic, onClose }: { api: Api; topic: TopicView; onClose: () => void }) {
+interface Props {
+  api: Api;
+  topic: TopicView;
+  onClose: () => void;
+  onDeleted: (term: string) => void;
+}
+
+export function TopicDialog({ api, topic, onClose, onDeleted }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const qc = useQueryClient();
   const [explanation, setExplanation] = useState(topic.explanation);
   const [edited, setEdited] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     const d = ref.current;
@@ -38,6 +46,17 @@ export function TopicDialog({ api, topic, onClose }: { api: Api; topic: TopicVie
     onSuccess: () => {
       setEdited(true);
       refresh();
+    },
+    onError,
+  });
+
+  const remove = useMutation({
+    mutationFn: () => api.deleteTopic(topic.id),
+    onSuccess: ({ deleted }) => {
+      qc.setQueryData<TopicView[]>(["topics"], (list) => list?.filter((t) => t.id !== topic.id));
+      void qc.invalidateQueries({ queryKey: ["topics"] });
+      onDeleted(deleted.term);
+      ref.current?.close();
     },
     onError,
   });
@@ -180,19 +199,43 @@ export function TopicDialog({ api, topic, onClose }: { api: Api; topic: TopicVie
           </p>
         )}
 
-        <div className="row-end">
-          <button
-            type="button"
-            className="btn"
-            disabled={update.isPending || explanation === topic.explanation}
-            onClick={() => update.mutate({ explanation })}
+        {confirmDelete ? (
+          <div
+            className="confirm-delete"
+            role="group"
+            aria-label="Confirm delete"
+            ref={(el) => el?.scrollIntoView({ block: "nearest" })}
           >
-            {update.isPending ? "Saving…" : "Save explanation"}
-          </button>
-          <button type="button" className="btn primary" onClick={() => void copy()}>
-            {copied ? "Copied · paste it in Claude" : "Copy test prompt"}
-          </button>
-        </div>
+            <span>Delete "{topic.term}" and its history? This can't be undone.</span>
+            <div className="row-end">
+              <button type="button" className="btn" onClick={() => setConfirmDelete(false)} disabled={remove.isPending}>
+                Cancel
+              </button>
+              <button type="button" className="btn danger" onClick={() => remove.mutate()} disabled={remove.isPending}>
+                {remove.isPending ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="sheet-actions">
+            <button type="button" className="link-btn delete-link" onClick={() => setConfirmDelete(true)}>
+              Delete card
+            </button>
+            <div className="row-end">
+              <button
+                type="button"
+                className="btn"
+                disabled={update.isPending || explanation === topic.explanation}
+                onClick={() => update.mutate({ explanation })}
+              >
+                {update.isPending ? "Saving…" : "Save explanation"}
+              </button>
+              <button type="button" className="btn primary" onClick={() => void copy()}>
+                {copied ? "Copied · paste it in Claude" : "Copy test prompt"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </dialog>
   );

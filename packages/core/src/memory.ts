@@ -48,6 +48,15 @@ export class InMemoryRepository implements PrepUpRepository {
     this.settings.set(key, { ...current, ...patch });
   }
 
+  async deleteTopic(workspaceId: string, topicId: string) {
+    const before = this.topics.length;
+    this.topics = this.topics.filter((t) => !(t.id === topicId && t.workspaceId === workspaceId));
+    if (this.topics.length === before) return false;
+    this.events = this.events.filter((e) => e.topicId !== topicId);
+    for (const key of this.settings.keys()) if (key.endsWith(`:${topicId}`)) this.settings.delete(key);
+    return true;
+  }
+
   async appendEvent(event: NewEvent) {
     this.events.push({ ...event, id: randomUUID() });
   }

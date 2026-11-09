@@ -55,6 +55,7 @@ export function createApi(getToken: TokenSource, mode: AppConfig["authMode"]) {
     updateTopic: (id: string, body: { importance?: string; explanation?: string }) =>
       call<TopicView>(`/api/topics/${id}`, { method: "PATCH", body }),
     setScore: (id: string, score: number) => call<TopicView>(`/api/topics/${id}/score`, { method: "PUT", body: { score } }),
+    deleteTopic: (id: string) => call<{ deleted: { term: string } }>(`/api/topics/${id}`, { method: "DELETE" }),
     history: (id: string) => call<ReviewEventView[]>(`/api/topics/${id}/history`),
   };
 }

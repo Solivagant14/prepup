@@ -17,8 +17,7 @@ export function consentPage(supabaseUrl: string, publishableKey: string, nonce: 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Connect to PrepUp</title>
 <style nonce="${nonce}">
-  :root { color-scheme: light dark; --bg:#FAFAFA; --ink:#18181B; --muted:#71717A; --line:#E4E4E7; --btn:#18181B; --btnInk:#FFFFFF; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0E0E11; --ink:#EDEDEF; --muted:#A1A1AA; --line:#27272A; --btn:#EDEDEF; --btnInk:#0E0E11; } }
+  :root { color-scheme: light; --bg:#FAFAFA; --ink:#18181B; --muted:#71717A; --line:#E4E4E7; --btn:#18181B; --btnInk:#FFFFFF; }
   * { box-sizing: border-box; }
   body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
   main { width:100%; max-width:380px; display:flex; flex-direction:column; gap:16px; }

@@ -59,6 +59,9 @@ export interface PrepUpRepository {
 
   upsertSettings(userId: string, topicId: string, patch: SettingsPatch, now: Date): Promise<void>;
 
+  /** Deletes the topic with its settings and history. Returns false if it isn't in this workspace. */
+  deleteTopic(workspaceId: string, topicId: string): Promise<boolean>;
+
   appendEvent(event: NewEvent): Promise<void>;
   listEvents(workspaceId: string, userId: string, topicId: string): Promise<EventRecord[]>;
 }

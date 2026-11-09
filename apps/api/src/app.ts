@@ -95,6 +95,7 @@ export function createApp(opts: AppOptions) {
   app.get("/api/topics/:id", async (c) => c.json(await svc.getTopic(c.var.actor, uuidParam(c))));
   app.patch("/api/topics/:id", async (c) => c.json(await svc.updateTopic(c.var.actor, uuidParam(c), await body(c), "web")));
   app.put("/api/topics/:id/score", async (c) => c.json(await svc.setScore(c.var.actor, uuidParam(c), await body(c), "web")));
+  app.delete("/api/topics/:id", async (c) => c.json({ deleted: await svc.deleteTopic(c.var.actor, uuidParam(c)) }));
   app.get("/api/topics/:id/history", async (c) => c.json(await svc.history(c.var.actor, uuidParam(c))));
 
   // Stateless Streamable HTTP: a fresh MCP server per request, bound to the

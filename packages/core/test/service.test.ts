@@ -86,7 +86,8 @@ describe("PrepUpService", () => {
     await service.updateTopic(me, evals.id, { importance: "high" }, "web");
     await service.setScore(me, temp.id, { score: 4 }, "web");
 
-    expect((await service.listTopics(me, { filter: "prep" })).map((t) => t.term)).toEqual(["Evals"]);
+    // Prep now = every weak topic (score 1-2), the important ones first.
+    expect((await service.listTopics(me, { filter: "prep" })).map((t) => t.term)).toEqual(["Evals", "Agents"]);
     expect((await service.listTopics(me, { filter: "confident" })).map((t) => t.term)).toEqual(["Temperature"]);
     expect((await service.listTopics(me)).map((t) => t.term)).toEqual(["Evals", "Agents", "Temperature"]);
   });
@@ -110,5 +111,22 @@ describe("PrepUpService", () => {
     expect(await service.listTopics(bob)).toEqual([]);
     await expect(service.getTopic(bob, topic.id)).rejects.toMatchObject({ code: "not_found" });
     await expect(service.setScore(bob, topic.id, { score: 5 }, "web")).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("deletes a topic with its history, only within the owner's workspace", async () => {
+    const { service } = setup();
+    const alice = await service.resolveActor("alice");
+    const bob = await service.resolveActor("bob");
+    const { topic } = await service.addTopic(alice, { term: "RAG" });
+    await service.recordReview(alice, { term: "RAG", score: 3, feedback: "ok" });
+
+    await expect(service.deleteTopic(bob, topic.id)).rejects.toMatchObject({ code: "not_found" });
+    expect(await service.deleteTopic(alice, topic.id)).toEqual({ term: "RAG" });
+    expect(await service.listTopics(alice)).toEqual([]);
+    await expect(service.history(alice, topic.id)).rejects.toMatchObject({ code: "not_found" });
+
+    // Capturing it again starts fresh.
+    const again = await service.addTopic(alice, { term: "rag" });
+    expect(again).toMatchObject({ created: true, topic: { score: 1 } });
   });
 });
