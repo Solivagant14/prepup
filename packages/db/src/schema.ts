@@ -83,6 +83,17 @@ export const topicSettings = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.topicId] })],
 );
 
+/** Personal settings that aren't about one topic. Today: how the user wants to be tested. */
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    userId: uuid("user_id").primaryKey(),
+    testingStyle: text("testing_style").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("user_settings_style_length", sql`char_length(${t.testingStyle}) BETWEEN 1 AND 1500`)],
+);
+
 /**
  * One row per user: how many requests they made in the current minute and
  * day. Shared by every serverless instance, which in-memory counters are not.

@@ -1,8 +1,10 @@
 # PrepUp
 
-A focused tracker for the AI buzzwords you're preparing for interviews. Capture a term the moment you hear it, let Claude test you on it, and watch your deck darken as you master it.
+A tracker for the things you're trying to learn: interview topics, exam material, the vocabulary of a new field. Capture a term the moment you hear it, let Claude test you on it, and watch your deck darken as you master it.
 
-PrepUp has **no AI of its own**. All testing runs in your own Claude app through an MCP connector; PrepUp is the system of record.
+PrepUp has **no AI of its own**. All testing runs in your own Claude app through an MCP connector (MCP is the open protocol that lets an AI assistant use outside tools); PrepUp is the system of record. You choose how you're tested: as a technical interviewer, a patient tutor, a quick drill, or in your own words.
+
+Open source under the [MIT license](LICENSE). To run your own copy, see [docs/self-hosting.md](docs/self-hosting.md).
 
 ## How it fits together
 
@@ -31,7 +33,6 @@ flowchart TB
 | `apps/api` | Hono HTTP server: REST routes, the MCP server at `/mcp`, token checks, OAuth consent page |
 | `apps/web` | React + Vite web app: the card deck, progress tracker and card pop-up |
 | `scripts/build-vercel.mjs` | Builds the web app and the API into Vercel's Build Output format |
-| `skills/prepup-coach` | An optional Claude skill that makes testing interview-style |
 
 ## The rules
 
@@ -40,6 +41,7 @@ flowchart TB
 - **Manual edits** change the score you see, but the clock keeps running, and the edit is labelled in history.
 - **A 5 must be earned.** `record_review` rejects a 5 unless `explained: true`, and the database enforces it too.
 - **Claude can draft your explanation.** After a test, Claude writes the card's explanation in your voice from your answers. It's saved only if you approve it, in the same transaction as the score, and the card shows that Claude drafted it.
+- **Your style, PrepUp's rules.** On the Claude setup page you write how you want to be tested. A short list of fixed rules (one topic at a time, no peeking at your notes, nothing saved without your yes) always comes first, and no style can override them. Both live in `packages/core/src/testing.ts`, which the MCP server and the page both read.
 - **Duplicates merge.** "LangChain", "lang chain" and "Lang-Chain" are one card.
 
 ## Limits and safety
@@ -99,9 +101,9 @@ Deploying: see [docs/deploy-vercel.md](docs/deploy-vercel.md). Google and GitHub
 - **M0** Auth spike: Claude connects to `/mcp` behind a real Supabase login
 - **M1** Core, database and tests
 - **M2** Web app: the card deck, hosted with the API on Vercel
-- **M3** MCP polish and the PrepUp Coach skill, tested end to end from iPhone
+- **M3** MCP polish, tested end to end from iPhone
 - **M5** Hardening for other users: rate limits, topic caps, audience check, backups, delete my data
-- **M6** Generalize: MCP settings page with an editable testing style, open-source docs
+- **M6** Generalize: Claude setup page with an editable testing style, MIT license, self-host guide
 - **M7** Topic dependencies ("builds on"), mapped by Claude
 - **M8** Public launch
 - **v2.5** FSRS scheduling in place of the fixed 14 days

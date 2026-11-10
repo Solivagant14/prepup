@@ -11,6 +11,7 @@ export class InMemoryRepository implements PrepUpRepository {
   private topics: TopicRecord[] = [];
   private settings = new Map<string, { importance: Importance; explanation: string }>();
   private events: EventRecord[] = [];
+  private styles = new Map<string, { text: string; updatedAt: Date }>();
 
   async ensurePersonalWorkspace(userId: string): Promise<string> {
     let id = this.workspaces.get(userId);
@@ -71,7 +72,16 @@ export class InMemoryRepository implements PrepUpRepository {
     return true;
   }
 
+  async getTestingStyle(userId: string) {
+    return this.styles.get(userId) ?? null;
+  }
+
+  async saveTestingStyle(userId: string, text: string, now: Date) {
+    this.styles.set(userId, { text, updatedAt: now });
+  }
+
   async deleteUserData(userId: string) {
+    this.styles.delete(userId);
     const workspaceId = this.workspaces.get(userId);
     this.workspaces.delete(userId);
     const gone = new Set(this.topics.filter((t) => t.workspaceId === workspaceId).map((t) => t.id));

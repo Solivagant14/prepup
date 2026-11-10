@@ -40,7 +40,7 @@ const Term = z
 const OptionalUrl = z.url({ protocol: /^https?$/ }).max(2048).optional();
 
 export const AddTopicInput = z.object({
-  term: Term.describe("The buzzword or concept, e.g. 'RAG' or 'speculative decoding'"),
+  term: Term.describe("The term or concept, e.g. 'RAG' or 'speculative decoding'"),
   sourceUrl: OptionalUrl.describe("Where you heard it, e.g. a YouTube link"),
 });
 export type AddTopicInput = z.infer<typeof AddTopicInput>;
@@ -91,6 +91,26 @@ export const UpdateTopicInput = z
     message: "Nothing to update",
   });
 export type UpdateTopicInput = z.infer<typeof UpdateTopicInput>;
+
+/** The longest testing style a user can save. Long enough for a persona, short enough to stay a style. */
+export const TESTING_STYLE_MAX = 1500;
+
+export const UpdateSettingsInput = z.object({
+  testingStyle: z
+    .string()
+    .trim()
+    .min(1, "Describe how you want to be tested")
+    .max(TESTING_STYLE_MAX, `Keep it under ${TESTING_STYLE_MAX} characters`),
+});
+export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
+
+export interface UserSettingsView {
+  /** How this user wants to be tested; the default preset until they change it. */
+  testingStyle: string;
+  /** The preset the style matches exactly, or null when it's their own wording. */
+  preset: string | null;
+  updatedAt: string | null;
+}
 
 /** What every client sees for a topic. Scores here are already decayed. */
 export interface TopicView {

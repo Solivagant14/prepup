@@ -9,16 +9,19 @@ import {
   ListTopicsInput,
   RecordReviewInput,
   SetScoreInput,
+  UpdateSettingsInput,
   UpdateTopicInput,
   type EventSource,
   type ReviewEventView,
   type TopicFilter,
   type TopicView,
+  type UserSettingsView,
 } from "@prepup/contracts";
 import type { z } from "zod";
 import { DomainError } from "./errors.js";
 import type { NewEvent, PrepUpRepository, TopicState } from "./ports.js";
 import { computeScore, levelName, normalizeTerm, priority } from "./scoring.js";
+import { DEFAULT_TESTING_STYLE, presetOf } from "./testing.js";
 
 /** Who is acting, and in which workspace. Every call is scoped to this. */
 export interface Actor {
@@ -165,6 +168,19 @@ export class PrepUpService {
     const deleted = await this.repo.deleteTopic(actor.workspaceId, topicId);
     if (!deleted) throw new DomainError("not_found", "Topic not found");
     return { term: topic.term };
+  }
+
+  /** Personal settings. Until the user saves a style of their own, they get the default preset. */
+  async getSettings(actor: Actor): Promise<UserSettingsView> {
+    const saved = await this.repo.getTestingStyle(actor.userId);
+    const testingStyle = saved?.text ?? DEFAULT_TESTING_STYLE;
+    return { testingStyle, preset: presetOf(testingStyle), updatedAt: saved?.updatedAt.toISOString() ?? null };
+  }
+
+  async updateSettings(actor: Actor, input: unknown): Promise<UserSettingsView> {
+    const { testingStyle } = parse(UpdateSettingsInput, input);
+    await this.repo.saveTestingStyle(actor.userId, testingStyle, this.clock());
+    return this.getSettings(actor);
   }
 
   /** "Delete my data": everything PrepUp holds for this user. Signing in again starts an empty deck. */

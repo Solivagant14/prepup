@@ -16,6 +16,8 @@
 - Scores are computed from `review_events`; never store a score on the topic.
 - Only `record_review` (a Claude test) resets the fade clock. Manual edits don't.
 - PrepUp has no LLM API. AI happens in the user's Claude, through MCP.
+- PrepUp is for any learner. Keep product copy and MCP instructions free of one role or field.
+- How a test runs is defined in `packages/core/src/testing.ts`: fixed rules (ours) and the testing style (the user's). MCP tools are described once, in `TOOLS` in `apps/api/src/mcp.ts`.
 
 ## Working rules
 
