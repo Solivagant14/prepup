@@ -33,6 +33,10 @@ export class InMemoryRepository implements PrepUpRepository {
     return this.topics.find((t) => t.workspaceId === workspaceId && t.normalizedTerm === normalizedTerm) ?? null;
   }
 
+  async countTopics(workspaceId: string) {
+    return this.topics.filter((t) => t.workspaceId === workspaceId).length;
+  }
+
   async listTopicStates(workspaceId: string, userId: string): Promise<TopicState[]> {
     return this.topics.filter((t) => t.workspaceId === workspaceId).map((t) => this.state(t, userId));
   }
@@ -65,6 +69,18 @@ export class InMemoryRepository implements PrepUpRepository {
     this.events = this.events.filter((e) => e.topicId !== topicId);
     for (const key of this.settings.keys()) if (key.endsWith(`:${topicId}`)) this.settings.delete(key);
     return true;
+  }
+
+  async deleteUserData(userId: string) {
+    const workspaceId = this.workspaces.get(userId);
+    this.workspaces.delete(userId);
+    const gone = new Set(this.topics.filter((t) => t.workspaceId === workspaceId).map((t) => t.id));
+    this.topics = this.topics.filter((t) => !gone.has(t.id));
+    this.events = this.events.filter((e) => e.userId !== userId && !gone.has(e.topicId));
+    for (const key of this.settings.keys()) {
+      const [owner, topicId] = key.split(":");
+      if (owner === userId || gone.has(topicId!)) this.settings.delete(key);
+    }
   }
 
   async listEvents(workspaceId: string, userId: string, topicId: string) {

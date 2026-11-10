@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type KeyboardEvent } from "react";
 import type { Api } from "../lib/api.js";
 import { matches, summarize, TABS, type Tab } from "../lib/deck.js";
+import { DeleteAccount } from "./DeleteAccount.js";
 import { TopicCard } from "./TopicCard.js";
 import { TopicDialog } from "./TopicDialog.js";
 import { Tracker } from "./Tracker.js";
@@ -118,6 +119,15 @@ export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
           onDeleted={(term) => setStatus({ text: `Deleted "${term}"` })}
         />
       )}
+
+      <DeleteAccount
+        api={api}
+        topicCount={all.length}
+        onDeleted={() => {
+          setStatus({ text: "Your data was deleted" });
+          onSignOut?.();
+        }}
+      />
     </div>
   );
 }

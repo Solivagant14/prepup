@@ -80,7 +80,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
     },
     async () =>
       guard(async () => {
-        const topics = await service.listTopics(actor, { filter: "all", limit: 100 });
+        const topics = await service.listTopics(actor, { filter: "all", limit: 500 });
         return toolResult(`Connected to PrepUp. ${topics.length} topic(s) in your deck.`, {
           userId: actor.userId,
           topics: topics.length,

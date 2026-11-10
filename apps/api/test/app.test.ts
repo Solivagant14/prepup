@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { DevAuthenticator, SupabaseAuthenticator } from "../src/auth.js";
 import { loadConfig } from "../src/config.js";
+import { InMemoryRateLimitStore, type RateLimitStore } from "../src/rate-limit.js";
 
 const USER = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -91,12 +92,17 @@ describe("SupabaseAuthenticator", () => {
         .sign(privateKey);
     const req = (token: string) => new Request("https://x/mcp", { headers: { authorization: `Bearer ${token}` } });
 
-    expect(await auth.authenticate(req(await sign({ role: "authenticated", client_id: "claude" })))).toEqual({
+    const user = { role: "authenticated", aud: "authenticated" };
+    expect(await auth.authenticate(req(await sign({ ...user, client_id: "claude" })))).toEqual({
       userId: USER,
       clientId: "claude",
     });
-    expect(await auth.authenticate(req(await sign({ role: "authenticated" }, "https://evil.example/auth/v1")))).toBeNull();
-    expect(await auth.authenticate(req(await sign({ role: "anon" })))).toBeNull();
+    expect(await auth.authenticate(req(await sign(user, "https://evil.example/auth/v1")))).toBeNull();
+    expect(await auth.authenticate(req(await sign({ ...user, role: "anon" })))).toBeNull();
+    // The audience must be the one Supabase gives signed-in users: missing or different is refused.
+    expect(await auth.authenticate(req(await sign({ role: "authenticated" })))).toBeNull();
+    expect(await auth.authenticate(req(await sign({ ...user, aud: "some-other-api" })))).toBeNull();
+    expect(await auth.authenticate(req(await sign({ ...user, aud: ["some-other-api", "authenticated"] })))).not.toBeNull();
     expect(await auth.authenticate(req("not-a-jwt"))).toBeNull();
     expect(await auth.authenticate(new Request("https://x/mcp"))).toBeNull();
   });
@@ -133,6 +139,89 @@ describe("REST", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: "invalid" });
     expect((await app.request("/api/topics/not-a-uuid", as(USER))).status).toBe(404);
+  });
+});
+
+describe("hardening", () => {
+  const limited = (store: RateLimitStore, now: () => Date, perMinute = 2, perDay = 3) =>
+    createApp({
+      service: new PrepUpService(new InMemoryRepository()),
+      auth: new DevAuthenticator(),
+      publicUrl: PUBLIC_URL,
+      rateLimit: { store, perMinute, perDay, now },
+    });
+
+  it("limits each user per minute and per day, on REST and MCP alike", async () => {
+    let now = new Date("2026-11-01T09:00:30Z");
+    const app = limited(new InMemoryRateLimitStore(), () => now);
+    const get = (user: string, path = "/api/topics") => app.request(path, as(user));
+
+    expect((await get(USER)).status).toBe(200);
+    expect((await get(USER)).status).toBe(200);
+    const blocked = await app.request("/mcp", as(USER, { method: "POST", body: "{}" }));
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("retry-after")).toBe("30");
+    expect(await blocked.json()).toMatchObject({ error: "rate_limited" });
+    expect((await get(OTHER)).status).toBe(200);
+
+    // A new minute lifts the burst limit, but the blocked call still counted toward the day.
+    now = new Date("2026-11-01T09:01:00Z");
+    const daily = await get(USER);
+    expect(daily.status).toBe(429);
+    expect(await daily.json()).toMatchObject({ message: expect.stringContaining("Daily") });
+    now = new Date("2026-11-02T00:00:00Z");
+    expect((await get(USER)).status).toBe(200);
+  });
+
+  it("doesn't count requests without a valid sign-in, and stays up if the counter breaks", async () => {
+    const hits: string[] = [];
+    const store: RateLimitStore = {
+      hit: async (userId) => {
+        hits.push(userId);
+        throw new Error("relation \"rate_limits\" does not exist");
+      },
+    };
+    const app = limited(store, () => new Date());
+    expect((await app.request("/api/topics")).status).toBe(401);
+    expect(hits).toEqual([]);
+    expect((await app.request("/api/topics", as(USER))).status).toBe(200);
+    expect(hits).toEqual([USER]);
+  });
+
+  it("reports a full deck as a rule, not a crash", async () => {
+    const app = createApp({
+      service: new PrepUpService(new InMemoryRepository(), undefined, { maxTopics: 1 }),
+      auth: new DevAuthenticator(),
+      publicUrl: PUBLIC_URL,
+    });
+    const add = (term: string) => app.request("/api/topics", as(USER, { method: "POST", body: JSON.stringify({ term }) }));
+    expect((await add("RAG")).status).toBe(201);
+    const full = await add("MCP");
+    expect(full.status).toBe(422);
+    expect(await full.json()).toMatchObject({ error: "rule", message: expect.stringContaining("deck is full") });
+  });
+
+  it("deletes the signed-in user's data and only theirs", async () => {
+    const add = (user: string) => app.request("/api/topics", as(user, { method: "POST", body: JSON.stringify({ term: "RAG" }) }));
+    await add(USER);
+    await add(OTHER);
+    expect((await app.request("/api/account", { method: "DELETE" })).status).toBe(401);
+    const res = await app.request("/api/account", as(USER, { method: "DELETE" }));
+    expect(await res.json()).toEqual({ deleted: true });
+    expect(await (await app.request("/api/topics", as(USER))).json()).toEqual([]);
+    expect(await (await app.request("/api/topics", as(OTHER))).json()).toHaveLength(1);
+  });
+
+  it("has safe defaults for limits and rejects nonsense", () => {
+    const base = { DATABASE_URL: "postgres://x", AUTH_MODE: "dev" };
+    expect(loadConfig(base)).toMatchObject({
+      AUTH_AUDIENCE: "authenticated",
+      RATE_LIMIT_PER_MINUTE: 120,
+      RATE_LIMIT_PER_DAY: 5000,
+      MAX_TOPICS_PER_USER: 500,
+    });
+    expect(() => loadConfig({ ...base, MAX_TOPICS_PER_USER: "9999" })).toThrow(/MAX_TOPICS_PER_USER/);
+    expect(() => loadConfig({ ...base, RATE_LIMIT_PER_MINUTE: "0" })).toThrow(/RATE_LIMIT_PER_MINUTE/);
   });
 });
 

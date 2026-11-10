@@ -14,6 +14,9 @@ export type Score = z.infer<typeof Score>;
 
 export const LEVEL_NAMES = ["Shaky", "Learning", "Getting there", "Confident", "Can explain"] as const;
 
+/** How many topics one workspace may hold unless the host sets another cap. Matches the largest list page. */
+export const DEFAULT_MAX_TOPICS = 500;
+
 export const TOPIC_FILTERS = ["all", "prep", "fading_week", "confident"] as const;
 export const TopicFilter = z.enum(TOPIC_FILTERS);
 export type TopicFilter = z.infer<typeof TopicFilter>;

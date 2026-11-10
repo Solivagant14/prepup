@@ -1,0 +1,60 @@
+name: Backup
+
+# A nightly encrypted dump of the database, kept for 30 days. Supabase's free
+# plan has no backups of its own. This job only reads: it never changes the
+# database. It does nothing until both secrets below are set (see docs/backups.md).
+
+on:
+  schedule:
+    - cron: "40 20 * * *" # 20:40 UTC, 02:10 in India
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check the secrets are set
+        id: ready
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::notice::Backups are off: set BACKUP_DATABASE_URL and BACKUP_PASSPHRASE (docs/backups.md)."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The dump holds everyone's data and artifacts of a public repo can be
+      # downloaded by any signed-in GitHub user, so it is encrypted before it
+      # leaves this job. Only the passphrase holder can read it.
+      - name: Dump and encrypt
+        if: steps.ready.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          file="prepup-$(date -u +%Y-%m-%d).dump.gpg"
+          docker run --rm -e PGURL="$BACKUP_DATABASE_URL" postgres:17 \
+            sh -c 'pg_dump "$PGURL" --schema=public --schema=drizzle --format=custom --no-owner --no-privileges' \
+            | gpg --batch --symmetric --cipher-algo AES256 --passphrase-fd 3 --output "$file" 3<<<"$BACKUP_PASSPHRASE"
+          # A real dump is never this small; fail loudly rather than keep an empty backup.
+          test "$(stat -c %s "$file")" -gt 2000
+          echo "BACKUP_FILE=$file" >> "$GITHUB_ENV"
+
+      - name: Keep it for 30 days
+        if: steps.ready.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_FILE }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error

@@ -42,6 +42,18 @@ flowchart TB
 - **Claude can draft your explanation.** After a test, Claude writes the card's explanation in your voice from your answers. It's saved only if you approve it, in the same transaction as the score, and the card shows that Claude drafted it.
 - **Duplicates merge.** "LangChain", "lang chain" and "Lang-Chain" are one card.
 
+## Limits and safety
+
+Built to be shared on free tiers, so one account can't crowd out the rest:
+
+- **Request limits per user:** 120 a minute and 5,000 a day, counted in Postgres so every serverless instance sees the same numbers. Over the limit, the API answers `429` with `Retry-After`.
+- **500 topics per deck.** The cap is a core rule, so the web app and Claude hit the same wall.
+- **Tokens are checked three ways:** signed by the Supabase project's keys, issued by that project, and carrying the audience Supabase gives signed-in users. Use a Supabase project that serves only PrepUp.
+- **Delete my data** (foot of the page) removes every topic, score, explanation and history row you have.
+- **Nightly encrypted backups** through GitHub Actions: see [docs/backups.md](docs/backups.md).
+
+All four numbers are environment variables (`.env.example`).
+
 ## Design decisions
 
 | Decision | Why | Trade-off |
@@ -88,4 +100,8 @@ Deploying: see [docs/deploy-vercel.md](docs/deploy-vercel.md). Google and GitHub
 - **M1** Core, database and tests
 - **M2** Web app: the card deck, hosted with the API on Vercel
 - **M3** MCP polish and the PrepUp Coach skill, tested end to end from iPhone
-- **M4** Ship: CI deploy, demo video
+- **M5** Hardening for other users: rate limits, topic caps, audience check, backups, delete my data
+- **M6** Generalize: MCP settings page with an editable testing style, open-source docs
+- **M7** Topic dependencies ("builds on"), mapped by Claude
+- **M8** Public launch
+- **v2.5** FSRS scheduling in place of the fixed 14 days
