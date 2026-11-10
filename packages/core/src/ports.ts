@@ -77,6 +77,10 @@ export interface PrepUpRepository {
   /** Deletes the topic with its settings and history. Returns false if it isn't in this workspace. */
   deleteTopic(workspaceId: string, topicId: string): Promise<boolean>;
 
+  /** The user's saved testing style, or null if they never changed the default. */
+  getTestingStyle(userId: string): Promise<{ text: string; updatedAt: Date } | null>;
+  saveTestingStyle(userId: string, text: string, now: Date): Promise<void>;
+
   /**
    * "Delete my data": removes the user's personal workspace with every topic in
    * it, plus their settings, events and memberships anywhere else.

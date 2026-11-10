@@ -9,7 +9,7 @@ import type { EventSource } from "@prepup/contracts";
 import { and, count, desc, eq, isNotNull } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema.js";
-import { memberships, rateLimits, reviewEvents, topicSettings, topics, workspaces } from "./schema.js";
+import { memberships, rateLimits, reviewEvents, topicSettings, topics, userSettings, workspaces } from "./schema.js";
 
 export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 
@@ -96,6 +96,22 @@ export class PostgresRepository implements PrepUpRepository {
     return deleted.length > 0;
   }
 
+  async getTestingStyle(userId: string) {
+    const [row] = await this.db
+      .select({ text: userSettings.testingStyle, updatedAt: userSettings.updatedAt })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async saveTestingStyle(userId: string, text: string, now: Date): Promise<void> {
+    await this.db
+      .insert(userSettings)
+      .values({ userId, testingStyle: text, updatedAt: now })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { testingStyle: text, updatedAt: now } });
+  }
+
   /**
    * One transaction. Deleting the personal workspace cascades to its topics,
    * settings and events; the other deletes cover rows the user has in
@@ -107,6 +123,7 @@ export class PostgresRepository implements PrepUpRepository {
       await tx.delete(reviewEvents).where(eq(reviewEvents.userId, userId));
       await tx.delete(topicSettings).where(eq(topicSettings.userId, userId));
       await tx.delete(memberships).where(eq(memberships.userId, userId));
+      await tx.delete(userSettings).where(eq(userSettings.userId, userId));
       await tx.delete(rateLimits).where(eq(rateLimits.userId, userId));
     });
   }

@@ -113,7 +113,7 @@ export function daysAgo(iso: string, now = Date.now()): string {
 }
 
 export const testPrompt = (term: string) =>
-  `Use PrepUp to test me on "${term}" like an FDE interviewer, then suggest a score for me to confirm.`;
+  `Use PrepUp to test me on "${term}", then suggest a score for me to confirm.`;
 
 export const IMPORTANCES: Importance[] = ["high", "medium", "low"];
 

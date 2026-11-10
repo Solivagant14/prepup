@@ -5,12 +5,12 @@
 import { randomBytes } from "node:crypto";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { OAuthProvider } from "@prepup/contracts";
-import { DomainError, type Actor, type PrepUpService } from "@prepup/core";
+import { DomainError, FIXED_RULES, STYLE_PRESETS, type Actor, type PrepUpService } from "@prepup/core";
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Authenticator } from "./auth.js";
 import { consentCsp, consentPage } from "./consent.js";
-import { createMcpServer } from "./mcp.js";
+import { createMcpServer, describeConnector, testingStyleFor } from "./mcp.js";
 import { checkRateLimit, type RateLimitOptions } from "./rate-limit.js";
 
 export interface AppOptions {
@@ -112,6 +112,20 @@ export function createApp(opts: AppOptions) {
   app.delete("/api/topics/:id", async (c) => c.json({ deleted: await svc.deleteTopic(c.var.actor, uuidParam(c)) }));
   app.get("/api/topics/:id/history", async (c) => c.json(await svc.history(c.var.actor, uuidParam(c))));
 
+  // Personal settings, and everything the "Claude setup" page shows. The tool
+  // list and rules come from the same definitions the MCP server uses.
+  app.get("/api/settings", async (c) => c.json(await svc.getSettings(c.var.actor)));
+  app.put("/api/settings", async (c) => c.json(await svc.updateSettings(c.var.actor, await body(c))));
+  app.get("/api/connector", async (c) =>
+    c.json({
+      url: `${opts.publicUrl}/mcp`,
+      ...describeConnector(),
+      fixedRules: FIXED_RULES.map(({ id, rule, why }) => ({ id, rule, why })),
+      presets: STYLE_PRESETS,
+      settings: await svc.getSettings(c.var.actor),
+    }),
+  );
+
   // "Delete my data". Web only on purpose: Claude has no tool for it.
   app.delete("/api/account", async (c) => {
     await svc.deleteAccount(c.var.actor);
@@ -121,7 +135,10 @@ export function createApp(opts: AppOptions) {
   // Stateless Streamable HTTP: a fresh MCP server per request, bound to the
   // signed-in user. No session state to lose when a machine restarts.
   app.post("/mcp", async (c) => {
-    const server = createMcpServer(svc, c.var.actor);
+    // The style only travels in the instructions, which a client reads once, when it
+    // connects. Every other call skips the lookup.
+    const style = (await isInitialize(c.req.raw)) ? await testingStyleFor(svc, c.var.actor) : undefined;
+    const server = createMcpServer(svc, c.var.actor, style);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -139,6 +156,15 @@ export function createApp(opts: AppOptions) {
   app.delete("/mcp", methodNotAllowed);
 
   return app;
+}
+
+async function isInitialize(request: Request): Promise<boolean> {
+  try {
+    const message = (await request.clone().json()) as { method?: unknown } | Array<{ method?: unknown }>;
+    return (Array.isArray(message) ? message : [message]).some((m) => m?.method === "initialize");
+  } catch {
+    return false;
+  }
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -175,7 +175,7 @@ export function TopicDialog({ api, topic, onClose, onDeleted }: Props) {
             className="explanation"
             rows={4}
             maxLength={4000}
-            placeholder="In your own words, as you'd say it to an interviewer"
+            placeholder="In your own words, as you'd explain it to someone else"
             value={explanation}
             onChange={(e) => setExplanation(e.target.value)}
           />

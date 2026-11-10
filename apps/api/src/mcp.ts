@@ -13,23 +13,68 @@ import {
   TOPIC_FILTERS,
   type TopicView,
 } from "@prepup/contracts";
-import { DomainError, type Actor, type PrepUpService } from "@prepup/core";
+import {
+  buildInstructions,
+  DEFAULT_TESTING_STYLE,
+  DomainError,
+  styleBlock,
+  type Actor,
+  type PrepUpService,
+} from "@prepup/core";
 import { z } from "zod";
 
-export const SERVER_INSTRUCTIONS = `PrepUp tracks the AI buzzwords the user is preparing for Forward Deployed Engineer interviews.
-Each topic has a score from 1 to 5: 1-4 is how well they understand it and can answer questions; 5 means they can explain it clearly.
-Scores fade one step every 14 days unless the topic is tested again.
+/**
+ * Every tool and prompt, described once. The server registers them from this
+ * list and the settings page shows the same list, so what users read is what
+ * Claude gets.
+ */
+export const TOOLS = {
+  whoami: {
+    title: "Check the PrepUp connection",
+    description:
+      "Confirms the connection works, counts the user's topics, and returns their current testing style. Call it before the first test in a conversation.",
+    readOnly: true,
+  },
+  add_topic: {
+    title: "Add a topic",
+    description:
+      "Add a term or concept to the user's PrepUp deck. Idempotent: if it already exists (even spelled differently), the existing card is returned.",
+    readOnly: false,
+  },
+  list_topics: {
+    title: "List topics",
+    description:
+      "List the user's topics, highest priority first (important, weak, or about to fade). Use this to choose what to test.",
+    readOnly: true,
+  },
+  get_topic: {
+    title: "Read a topic",
+    description:
+      "Read one topic in full, including the user's saved explanation and recent test feedback. During a test, call this only after the user has answered, so you don't prompt them with their own notes.",
+    readOnly: true,
+  },
+  record_review: {
+    title: "Record a test result",
+    description:
+      "Save the result of testing the user on a topic: the score, and optionally the explanation you drafted for their card. Only call after the user has confirmed both. Resets the topic's 14-day fade clock. A score of 5 requires explained: true.",
+    readOnly: false,
+  },
+} as const;
 
-Capturing: when the user mentions a term they want to learn, call add_topic. It is safe to call twice; duplicates merge.
+export const PROMPTS = {
+  test_me: { title: "Test me", description: "Run a short test on your PrepUp topics, in your testing style." },
+  quick_capture: { title: "Quick capture", description: "Add one or more terms to PrepUp." },
+} as const;
 
-Testing:
-1. Pick topics with list_topics (use filter "fading_week" or "prep" unless the user names topics).
-2. Ask about one topic at a time, like an interviewer: start open ("explain X"), then one or two follow-ups that probe depth or a real use case.
-3. Give short feedback: what was right, what was missing. Suggest a score with a one-line reason. Only suggest 5 if they explained it clearly in their own words.
-4. Draft their explanation for the card: call get_topic to read the one they saved (only now, after they answered), then write 2-4 sentences in their voice ("RAG is when I..."), built from their answers plus any corrections they accepted. Keep the correct points from the saved one. Don't add things they didn't say or agree to.
-5. Show the score and the draft together and ask them to confirm, or change either. They can also say to keep their old explanation.
-6. Call record_review with the confirmed score, and the explanation only if they approved it. Never call it before they confirm. Then move to the next topic.
-Keep feedback short and specific. Never reveal the user's saved explanation before they answer.`;
+/** What the settings page lists under "What Claude can do". */
+export function describeConnector() {
+  return {
+    tools: Object.entries(TOOLS).map(([name, t]) => ({ name, ...t })),
+    prompts: Object.entries(PROMPTS).map(([name, p]) => ({ name, ...p })),
+  };
+}
+
+const meta = (name: keyof typeof TOOLS) => ({ title: TOOLS[name].title, description: TOOLS[name].description });
 
 const toolResult = (summary: string, data: unknown) => ({
   content: [{ type: "text" as const, text: `${summary}\n\n${JSON.stringify(data, null, 2)}` }],
@@ -65,23 +110,38 @@ async function guard<T>(fn: () => Promise<T>) {
   }
 }
 
-export function createMcpServer(service: PrepUpService, actor: Actor): McpServer {
+/**
+ * The user's testing style, or the default if it can't be read. A settings
+ * hiccup (say, the table isn't migrated yet) must never stop a test.
+ */
+export async function testingStyleFor(service: PrepUpService, actor: Actor): Promise<string> {
+  try {
+    return (await service.getSettings(actor)).testingStyle;
+  } catch (err) {
+    console.error("Could not read the testing style; using the default", err);
+    return DEFAULT_TESTING_STYLE;
+  }
+}
+
+/**
+ * A fresh server for one request, bound to one user. `style` goes into the
+ * instructions a client reads when it connects; whoami and the test prompt
+ * read the current style themselves, for clients that connected earlier.
+ */
+export function createMcpServer(service: PrepUpService, actor: Actor, style: string = DEFAULT_TESTING_STYLE): McpServer {
   const server = new McpServer(
-    { name: "prepup", title: "PrepUp", version: "0.2.0" },
-    { instructions: SERVER_INSTRUCTIONS, capabilities: { tools: {}, prompts: {} } },
+    { name: "prepup", title: "PrepUp", version: "0.3.0" },
+    { instructions: buildInstructions(style), capabilities: { tools: {}, prompts: {} } },
   );
 
   server.registerTool(
     "whoami",
-    {
-      title: "Check the PrepUp connection",
-      description: "Confirms the connection works and shows how many topics the signed-in user has.",
-      annotations: { readOnlyHint: true },
-    },
+    { ...meta("whoami"), annotations: { readOnlyHint: true } },
     async () =>
       guard(async () => {
         const topics = await service.listTopics(actor, { filter: "all", limit: 500 });
-        return toolResult(`Connected to PrepUp. ${topics.length} topic(s) in your deck.`, {
+        const style = await testingStyleFor(service, actor);
+        return toolResult(`Connected to PrepUp. ${topics.length} topic(s) in your deck.\n\n${styleBlock(style)}`, {
           userId: actor.userId,
           topics: topics.length,
         });
@@ -91,9 +151,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
   server.registerTool(
     "add_topic",
     {
-      title: "Add a topic",
-      description:
-        "Add a buzzword or concept to the user's PrepUp deck. Idempotent: if it already exists (even spelled differently), the existing card is returned.",
+      ...meta("add_topic"),
       inputSchema: AddTopicInput,
       annotations: { idempotentHint: true, destructiveHint: false },
     },
@@ -110,9 +168,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
   server.registerTool(
     "list_topics",
     {
-      title: "List topics",
-      description:
-        "List the user's topics, highest priority first (important, weak, or about to fade). Use this to choose what to test.",
+      ...meta("list_topics"),
       inputSchema: ListTopicsInput,
       annotations: { readOnlyHint: true },
     },
@@ -126,9 +182,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
   server.registerTool(
     "get_topic",
     {
-      title: "Read a topic",
-      description:
-        "Read one topic in full, including the user's saved explanation and recent test feedback. During a test, call this only after the user has answered, so you don't prompt them with their own notes.",
+      ...meta("get_topic"),
       inputSchema: GetTopicInput,
       annotations: { readOnlyHint: true },
     },
@@ -152,9 +206,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
   server.registerTool(
     "record_review",
     {
-      title: "Record a test result",
-      description:
-        "Save the result of testing the user on a topic: the score, and optionally the explanation you drafted for their card. Only call after the user has confirmed both. Resets the topic's 14-day fade clock. A score of 5 requires explained: true.",
+      ...meta("record_review"),
       inputSchema: RecordReviewInput,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
@@ -169,20 +221,19 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
   server.registerPrompt(
     "test_me",
     {
-      title: "Test me",
-      description: "Run a short interview-style test on your PrepUp topics.",
+      ...PROMPTS.test_me,
       argsSchema: {
         focus: z.enum(TOPIC_FILTERS).optional().describe("Which topics: fading_week, prep, confident or all"),
         count: z.string().optional().describe("How many topics, e.g. 5"),
       },
     },
-    ({ focus, count }) => ({
+    async ({ focus, count }) => ({
       messages: [
         {
           role: "user",
           content: {
             type: "text",
-            text: `Test me on ${count ?? "5"} of my PrepUp topics (filter: ${focus ?? "fading_week"}; if that returns nothing, use "prep", then "all"). Follow the PrepUp testing steps: one topic at a time, interviewer-style follow-ups, then suggest a score and a draft of my explanation in my own words, wait for my confirmation, then record both.`,
+            text: `Test me on ${count ?? "5"} of my PrepUp topics (filter: ${focus ?? "fading_week"}; if that returns nothing, use "prep", then "all"). Follow PrepUp's fixed rules: one topic at a time, then suggest a score and a draft of my explanation in my own words, wait for my confirmation, then record both.\n\nHow I want to be tested:\n"""\n${await testingStyleFor(service, actor)}\n"""`,
           },
         },
       ],
@@ -192,8 +243,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor): McpServer
   server.registerPrompt(
     "quick_capture",
     {
-      title: "Quick capture",
-      description: "Add one or more buzzwords to PrepUp.",
+      ...PROMPTS.quick_capture,
       argsSchema: { terms: z.string().describe("One or more terms, separated by commas") },
     },
     ({ terms }) => ({

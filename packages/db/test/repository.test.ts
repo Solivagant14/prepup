@@ -189,6 +189,29 @@ describe("PostgresRepository", () => {
   });
 });
 
+describe("user settings", () => {
+  it("saves and replaces a testing style per user", async () => {
+    const alice = await service.resolveActor(randomUUID());
+    const bob = await service.resolveActor(randomUUID());
+    expect((await service.getSettings(alice)).updatedAt).toBeNull();
+    await service.updateSettings(alice, { testingStyle: "First version." });
+    advance(1);
+    const second = await service.updateSettings(alice, { testingStyle: "Second version." });
+    expect(second).toMatchObject({ testingStyle: "Second version.", preset: null, updatedAt: now.toISOString() });
+    expect(await db.select().from(schema.userSettings)).toHaveLength(1);
+    expect((await service.getSettings(bob)).preset).toBe("interviewer");
+
+    await service.deleteAccount(alice);
+    expect(await db.select().from(schema.userSettings)).toHaveLength(0);
+  });
+
+  it("refuses an over-long style in the database too", async () => {
+    await expect(
+      db.insert(schema.userSettings).values({ userId: randomUUID(), testingStyle: "x".repeat(1501) }),
+    ).rejects.toThrow();
+  });
+});
+
 describe("PostgresRateLimitStore", () => {
   it("counts per user and starts over when the minute or day rolls", async () => {
     const store = new PostgresRateLimitStore(db);

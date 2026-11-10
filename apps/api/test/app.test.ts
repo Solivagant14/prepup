@@ -235,6 +235,78 @@ describe("MCP", () => {
     expect(res.result.serverInfo.name).toBe("prepup");
     expect(res.result.instructions).toMatch(/Never call it before they confirm/);
     expect(res.result.instructions).toMatch(/Never reveal the user's saved explanation before they answer/);
+    expect(res.result.instructions).toContain("Act as a technical interviewer");
+  });
+
+  it("tests each user in their own style: at connect, in whoami and in the Test me prompt", async () => {
+    const style = "Test me like a non-technical customer who asks why it matters.";
+    const put = await app.request("/api/settings", as(USER, { method: "PUT", body: JSON.stringify({ testingStyle: style }) }));
+    expect(await put.json()).toMatchObject({ testingStyle: style, preset: null });
+
+    const init = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } };
+    const mine = (await mcp(USER, "initialize", init)).result.instructions as string;
+    expect(mine).toContain(style);
+    expect(mine).not.toContain("Act as a technical interviewer");
+    expect(mine.indexOf("Never call it before they confirm")).toBeLessThan(mine.indexOf(style));
+    expect((await mcp(OTHER, "initialize", init)).result.instructions).not.toContain(style);
+
+    // A chat that connected before the change still gets the new style from these two.
+    const who = await mcp(USER, "tools/call", { name: "whoami", arguments: {} });
+    expect(who.result.content[0].text).toContain(style);
+    const prompt = await mcp(USER, "prompts/get", { name: "test_me", arguments: {} });
+    expect(prompt.result.messages[0].content.text).toContain(style);
+  });
+
+  it("falls back to the default style if settings can't be read", async () => {
+    const service = new PrepUpService(new InMemoryRepository());
+    service.getSettings = async () => {
+      throw new Error('relation "user_settings" does not exist');
+    };
+    const app2 = createApp({ service, auth: new DevAuthenticator(), publicUrl: PUBLIC_URL });
+    const res = await app2.request(
+      "/mcp",
+      as(USER, {
+        method: "POST",
+        headers: { accept: "application/json, text/event-stream" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } },
+        }),
+      }),
+    );
+    const text = JSON.stringify(await res.json());
+    expect(text).toContain("Act as a technical interviewer");
+    expect(text).not.toContain("user_settings");
+  });
+
+  it("shows the settings page exactly what the server registers", async () => {
+    const page = (await (await app.request("/api/connector", as(USER))).json()) as {
+      url: string;
+      tools: Array<{ name: string; description: string }>;
+      prompts: Array<{ name: string }>;
+      fixedRules: Array<{ rule: string; why: string }>;
+      presets: Array<{ id: string }>;
+      settings: { preset: string };
+    };
+    expect(page.url).toBe(`${PUBLIC_URL}/mcp`);
+    const live = (await mcp(USER, "tools/list")).result.tools as Array<{ name: string; description: string }>;
+    const byName = (list: Array<{ name: string; description: string }>) =>
+      list.map((t) => [t.name, t.description]).sort();
+    expect(byName(page.tools)).toEqual(byName(live));
+    const prompts = (await mcp(USER, "prompts/list")).result.prompts as Array<{ name: string }>;
+    expect(page.prompts.map((p) => p.name).sort()).toEqual(prompts.map((p) => p.name).sort());
+    expect(page.fixedRules.length).toBeGreaterThan(4);
+    expect(page.presets.map((p) => p.id)).toEqual(["interviewer", "tutor", "drill"]);
+    expect(page.settings.preset).toBe("interviewer");
+    expect((await app.request("/api/connector")).status).toBe(401);
+  });
+
+  it("rejects a bad testing style with a readable message", async () => {
+    const res = await app.request("/api/settings", as(USER, { method: "PUT", body: JSON.stringify({ testingStyle: "" }) }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid", message: expect.stringContaining("how you want to be tested") });
   });
 
   it("lists the tools and prompts", async () => {

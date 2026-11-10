@@ -1,5 +1,5 @@
 /** A thin client for the PrepUp REST API. Every call carries the signed-in user's token. */
-import type { OAuthProvider, ReviewEventView, TopicView } from "@prepup/contracts";
+import type { OAuthProvider, ReviewEventView, TopicView, UserSettingsView } from "@prepup/contracts";
 
 export interface AppConfig {
   authMode: "supabase" | "dev";
@@ -7,6 +7,16 @@ export interface AppConfig {
   supabasePublishableKey: string | null;
   /** Social sign-in buttons to show; empty means email and password only. */
   providers: OAuthProvider[];
+}
+
+/** Everything the "Claude setup" page shows, straight from the server's own definitions. */
+export interface ConnectorInfo {
+  url: string;
+  tools: Array<{ name: string; title: string; description: string; readOnly: boolean }>;
+  prompts: Array<{ name: string; title: string; description: string }>;
+  fixedRules: Array<{ id: string; rule: string; why: string }>;
+  presets: Array<{ id: string; name: string; summary: string; text: string }>;
+  settings: UserSettingsView;
 }
 
 /** Local development user, used only when the API runs with AUTH_MODE=dev. */
@@ -58,6 +68,9 @@ export function createApi(getToken: TokenSource, mode: AppConfig["authMode"]) {
       call<TopicView>(`/api/topics/${id}`, { method: "PATCH", body }),
     setScore: (id: string, score: number) => call<TopicView>(`/api/topics/${id}/score`, { method: "PUT", body: { score } }),
     deleteTopic: (id: string) => call<{ deleted: { term: string } }>(`/api/topics/${id}`, { method: "DELETE" }),
+    connector: () => call<ConnectorInfo>("/api/connector"),
+    saveTestingStyle: (testingStyle: string) =>
+      call<UserSettingsView>("/api/settings", { method: "PUT", body: { testingStyle } }),
     /** Removes everything PrepUp holds for the signed-in user. */
     deleteAccount: () => call<{ deleted: true }>("/api/account", { method: "DELETE" }),
     history: (id: string) => call<ReviewEventView[]>(`/api/topics/${id}/history`),

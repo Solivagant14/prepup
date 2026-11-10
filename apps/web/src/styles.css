@@ -151,3 +151,46 @@ textarea.explanation { width: 100%; padding: 12px 14px; border: 1px solid var(--
 /* Foot of the page: account actions that should be findable but never in the way. */
 .page-foot { display: flex; justify-content: center; margin-top: 16px; }
 .page-foot .confirm-delete { width: 100%; max-width: 520px; }
+
+/* Claude setup page */
+a.link-btn, a.brand { text-decoration: none; }
+a.brand { color: inherit; }
+.setup { max-width: 760px; }
+.setup-head h1 { margin: 8px 0 6px; font-size: 26px; font-weight: 500; letter-spacing: -0.02em; }
+.setup-head p { margin: 0; color: var(--ink-2); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; }
+.panel h2 { margin: 0; font-size: 16px; font-weight: 500; letter-spacing: -0.01em; }
+.panel h3 { margin: 12px 0 -8px; font-size: 14px; font-weight: 500; }
+.panel-lead { margin: -6px 0 0; font-size: 14px; color: var(--ink-2); }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.note:empty { display: none; }
+.copy-row { display: flex; gap: 8px; }
+.copy-row input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 13px; }
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.steps strong { color: var(--ink); font-weight: 500; }
+.presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.preset { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; text-align: left; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.preset:hover { border-color: #a1a1aa; }
+.preset[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.preset-name { font-size: 14px; font-weight: 500; }
+.preset-summary { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+textarea.style-text { min-height: 150px; }
+.count { font-size: 12px; color: var(--muted); }
+.count.error { color: var(--rose); }
+.rules { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+.rules li span { display: block; }
+.rules .why { margin-top: 2px; font-size: 13px; color: var(--muted); }
+.tools { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tools li { padding: 12px 0; border-top: 1px solid var(--line); }
+.tools li:first-child { border-top: none; padding-top: 0; }
+.tools li:last-child { padding-bottom: 0; }
+.tools p { margin: 4px 0 0; font-size: 13.5px; color: var(--ink-2); }
+.tool-head { display: flex; align-items: center; gap: 8px; }
+.tool-head code { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+.badge { padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--muted); font-size: 11.5px; }
+.badge.writes { background: #eef0ff; color: #312e81; }
+@media (max-width: 640px) {
+  .panel { padding: 18px 16px; }
+  .presets { grid-template-columns: 1fr; }
+  .copy-row { flex-direction: column; }
+}
