@@ -9,7 +9,7 @@ import { PrepUpService } from "@prepup/core";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeEach, describe, expect, it } from "vitest";
-import { PostgresRepository, schema, type Db } from "../src/index.js";
+import { PostgresRateLimitStore, PostgresRepository, schema, type Db } from "../src/index.js";
 
 const migrationsFolder = fileURLToPath(new URL("../migrations", import.meta.url));
 
@@ -158,5 +158,56 @@ describe("PostgresRepository", () => {
     ).rejects.toThrow();
     expect(await db.select().from(schema.topicSettings)).toHaveLength(0);
     expect((await service.getTopic(me, topic.id)).explanation).toBe("");
+  });
+
+  it("enforces the topic cap against the real count", async () => {
+    const capped = new PrepUpService(new PostgresRepository(db), () => now, { maxTopics: 1 });
+    const me = await capped.resolveActor(randomUUID());
+    await capped.addTopic(me, { term: "RAG" });
+    await expect(capped.addTopic(me, { term: "MCP" })).rejects.toMatchObject({ code: "rule" });
+    expect((await capped.addTopic(me, { term: "rag" })).created).toBe(false);
+  });
+
+  it("deletes all of one user's rows and nobody else's", async () => {
+    const alice = await service.resolveActor(randomUUID());
+    const bob = await service.resolveActor(randomUUID());
+    await service.addTopic(alice, { term: "RAG" });
+    await service.updateTopic(alice, (await service.findByTerm(alice, "RAG")).id, { importance: "high" }, "web");
+    await service.recordReview(alice, { term: "RAG", score: 3, feedback: "ok" });
+    await service.addTopic(bob, { term: "RAG" });
+    await service.recordReview(bob, { term: "RAG", score: 2, feedback: "ok" });
+    await new PostgresRateLimitStore(db).hit(alice.userId, now);
+
+    await service.deleteAccount(alice);
+
+    expect(await db.select().from(schema.workspaces)).toMatchObject([{ ownerId: bob.userId }]);
+    expect(await db.select().from(schema.memberships)).toMatchObject([{ userId: bob.userId }]);
+    expect(await db.select().from(schema.topics)).toHaveLength(1);
+    expect(await db.select().from(schema.topicSettings)).toHaveLength(0);
+    expect(await db.select().from(schema.reviewEvents)).toMatchObject([{ userId: bob.userId }]);
+    expect(await db.select().from(schema.rateLimits)).toHaveLength(0);
+  });
+});
+
+describe("PostgresRateLimitStore", () => {
+  it("counts per user and starts over when the minute or day rolls", async () => {
+    const store = new PostgresRateLimitStore(db);
+    const [a, b] = [randomUUID(), randomUUID()];
+    const at = (iso: string) => new Date(iso);
+
+    expect(await store.hit(a, at("2026-11-01T09:00:05Z"))).toEqual({ minute: 1, day: 1 });
+    expect(await store.hit(a, at("2026-11-01T09:00:50Z"))).toEqual({ minute: 2, day: 2 });
+    expect(await store.hit(b, at("2026-11-01T09:00:55Z"))).toEqual({ minute: 1, day: 1 });
+    expect(await store.hit(a, at("2026-11-01T09:01:00Z"))).toEqual({ minute: 1, day: 3 });
+    expect(await store.hit(a, at("2026-11-02T00:00:00Z"))).toEqual({ minute: 1, day: 1 });
+    expect(await db.select().from(schema.rateLimits)).toHaveLength(2);
+  });
+
+  it("counts every request when many arrive at once", async () => {
+    const store = new PostgresRateLimitStore(db);
+    const user = randomUUID();
+    const at = new Date("2026-11-01T09:00:00Z");
+    const counts = await Promise.all(Array.from({ length: 10 }, () => store.hit(user, at)));
+    expect(counts.map((c) => c.minute).sort((x, y) => x - y)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 });

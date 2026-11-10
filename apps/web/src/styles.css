@@ -147,3 +147,7 @@ textarea.explanation { width: 100%; padding: 12px 14px; border: 1px solid var(--
 .auth .social:hover { border-color: #a1a1aa; }
 .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* Foot of the page: account actions that should be findable but never in the way. */
+.page-foot { display: flex; justify-content: center; margin-top: 16px; }
+.page-foot .confirm-delete { width: 100%; max-width: 520px; }

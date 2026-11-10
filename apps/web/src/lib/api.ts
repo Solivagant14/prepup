@@ -58,6 +58,8 @@ export function createApi(getToken: TokenSource, mode: AppConfig["authMode"]) {
       call<TopicView>(`/api/topics/${id}`, { method: "PATCH", body }),
     setScore: (id: string, score: number) => call<TopicView>(`/api/topics/${id}/score`, { method: "PUT", body: { score } }),
     deleteTopic: (id: string) => call<{ deleted: { term: string } }>(`/api/topics/${id}`, { method: "DELETE" }),
+    /** Removes everything PrepUp holds for the signed-in user. */
+    deleteAccount: () => call<{ deleted: true }>("/api/account", { method: "DELETE" }),
     history: (id: string) => call<ReviewEventView[]>(`/api/topics/${id}/history`),
   };
 }

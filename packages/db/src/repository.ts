@@ -6,10 +6,10 @@
 import type { Importance, Score } from "@prepup/contracts";
 import type { ChangeSet, EventRecord, PrepUpRepository, TopicRecord, TopicState } from "@prepup/core";
 import type { EventSource } from "@prepup/contracts";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema.js";
-import { memberships, reviewEvents, topicSettings, topics, workspaces } from "./schema.js";
+import { memberships, rateLimits, reviewEvents, topicSettings, topics, workspaces } from "./schema.js";
 
 export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 
@@ -55,6 +55,11 @@ export class PostgresRepository implements PrepUpRepository {
     return row ?? null;
   }
 
+  async countTopics(workspaceId: string): Promise<number> {
+    const [row] = await this.db.select({ n: count() }).from(topics).where(eq(topics.workspaceId, workspaceId));
+    return row?.n ?? 0;
+  }
+
   listTopicStates(workspaceId: string, userId: string): Promise<TopicState[]> {
     return this.states(workspaceId, userId);
   }
@@ -89,6 +94,21 @@ export class PostgresRepository implements PrepUpRepository {
       .where(and(eq(topics.workspaceId, workspaceId), eq(topics.id, topicId)))
       .returning({ id: topics.id });
     return deleted.length > 0;
+  }
+
+  /**
+   * One transaction. Deleting the personal workspace cascades to its topics,
+   * settings and events; the other deletes cover rows the user has in
+   * workspaces they don't own (none until collaboration exists).
+   */
+  async deleteUserData(userId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(workspaces).where(and(eq(workspaces.ownerId, userId), eq(workspaces.personal, true)));
+      await tx.delete(reviewEvents).where(eq(reviewEvents.userId, userId));
+      await tx.delete(topicSettings).where(eq(topicSettings.userId, userId));
+      await tx.delete(memberships).where(eq(memberships.userId, userId));
+      await tx.delete(rateLimits).where(eq(rateLimits.userId, userId));
+    });
   }
 
   async listEvents(workspaceId: string, userId: string, topicId: string): Promise<EventRecord[]> {

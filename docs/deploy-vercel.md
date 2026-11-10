@@ -69,6 +69,12 @@ Vercel doesn't run migrations. When a PR changes the schema, run this once from 
 DATABASE_URL='postgres://...session-pooler...:5432/postgres' pnpm db:migrate
 ```
 
+## Limits and backups
+
+- Each user gets 120 requests a minute, 5,000 a day and 500 topics. Change them in Vercel with `RATE_LIMIT_PER_MINUTE`, `RATE_LIMIT_PER_DAY` and `MAX_TOPICS_PER_USER`, then redeploy.
+- The request limits need the `rate_limits` table. Until the migration above has run, requests are allowed and the function logs "Rate limit check failed".
+- Nightly backups are off until you add two secrets: see [backups.md](backups.md).
+
 ## If something's off
 
 | Symptom | Probable cause |
@@ -77,4 +83,6 @@ DATABASE_URL='postgres://...session-pooler...:5432/postgres' pnpm db:migrate
 | Claude can't connect | `PUBLIC_URL` doesn't match the real URL, or Supabase's Site URL still points at Fly |
 | Every click takes over a second | Function region is far from Supabase (step 2) |
 | Errors mentioning "prepared statement" | `DATABASE_URL` is the session pooler; use the transaction pooler (6543) |
+| Everyone gets 401 after an upgrade | Tokens don't carry `aud: authenticated`; set `AUTH_AUDIENCE` to the value your Supabase project uses |
+| "Too many requests" | The per-user limit; raise `RATE_LIMIT_PER_MINUTE` if it's hit in normal use |
 | First load after a while is slow | A cold start (~1 s); normal on the free plan |

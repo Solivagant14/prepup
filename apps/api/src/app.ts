@@ -11,6 +11,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Authenticator } from "./auth.js";
 import { consentCsp, consentPage } from "./consent.js";
 import { createMcpServer } from "./mcp.js";
+import { checkRateLimit, type RateLimitOptions } from "./rate-limit.js";
 
 export interface AppOptions {
   service: PrepUpService;
@@ -22,6 +23,8 @@ export interface AppOptions {
   authMode?: "supabase" | "dev";
   /** Social sign-in buttons to show on the web app and consent page. */
   oauthProviders?: OAuthProvider[];
+  /** Per-user request limits. Left out, nothing is limited (unit tests). */
+  rateLimit?: RateLimitOptions;
 }
 
 type Env = { Variables: { actor: Actor } };
@@ -82,6 +85,13 @@ export function createApp(opts: AppOptions) {
       c.header("WWW-Authenticate", `Bearer resource_metadata="${metadataUrl}"`);
       return c.json({ error: "unauthorized", message: "Sign in to PrepUp" }, 401);
     }
+    if (opts.rateLimit) {
+      const limit = await checkRateLimit(opts.rateLimit, user.userId);
+      if (!limit.ok) {
+        c.header("Retry-After", String(limit.retryAfterSeconds));
+        return c.json({ error: "rate_limited", message: limit.message }, 429);
+      }
+    }
     c.set("actor", await opts.service.resolveActor(user.userId));
     await next();
   };
@@ -101,6 +111,12 @@ export function createApp(opts: AppOptions) {
   app.put("/api/topics/:id/score", async (c) => c.json(await svc.setScore(c.var.actor, uuidParam(c), await body(c), "web")));
   app.delete("/api/topics/:id", async (c) => c.json({ deleted: await svc.deleteTopic(c.var.actor, uuidParam(c)) }));
   app.get("/api/topics/:id/history", async (c) => c.json(await svc.history(c.var.actor, uuidParam(c))));
+
+  // "Delete my data". Web only on purpose: Claude has no tool for it.
+  app.delete("/api/account", async (c) => {
+    await svc.deleteAccount(c.var.actor);
+    return c.json({ deleted: true });
+  });
 
   // Stateless Streamable HTTP: a fresh MCP server per request, bound to the
   // signed-in user. No session state to lose when a machine restarts.

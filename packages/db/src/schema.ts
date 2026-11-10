@@ -83,6 +83,18 @@ export const topicSettings = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.topicId] })],
 );
 
+/**
+ * One row per user: how many requests they made in the current minute and
+ * day. Shared by every serverless instance, which in-memory counters are not.
+ */
+export const rateLimits = pgTable("rate_limits", {
+  userId: uuid("user_id").primaryKey(),
+  minuteStart: timestamp("minute_start", { withTimezone: true }).notNull(),
+  minuteCount: integer("minute_count").notNull(),
+  dayStart: timestamp("day_start", { withTimezone: true }).notNull(),
+  dayCount: integer("day_count").notNull(),
+});
+
 /** Append-only. Every Claude test, manual score edit and explanation change. */
 export const reviewEvents = pgTable(
   "review_events",

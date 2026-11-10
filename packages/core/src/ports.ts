@@ -66,6 +66,8 @@ export interface PrepUpRepository {
   insertTopicIfAbsent(topic: Omit<TopicRecord, "id">): Promise<{ record: TopicRecord; created: boolean }>;
   findTopicByNormalizedTerm(workspaceId: string, normalizedTerm: string): Promise<TopicRecord | null>;
 
+  countTopics(workspaceId: string): Promise<number>;
+
   listTopicStates(workspaceId: string, userId: string): Promise<TopicState[]>;
   getTopicState(workspaceId: string, userId: string, topicId: string): Promise<TopicState | null>;
 
@@ -74,6 +76,12 @@ export interface PrepUpRepository {
 
   /** Deletes the topic with its settings and history. Returns false if it isn't in this workspace. */
   deleteTopic(workspaceId: string, topicId: string): Promise<boolean>;
+
+  /**
+   * "Delete my data": removes the user's personal workspace with every topic in
+   * it, plus their settings, events and memberships anywhere else.
+   */
+  deleteUserData(userId: string): Promise<void>;
 
   listEvents(workspaceId: string, userId: string, topicId: string): Promise<EventRecord[]>;
 }

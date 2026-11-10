@@ -196,3 +196,41 @@ describe("explanations drafted by Claude", () => {
     expect(await service.history(me, topic.id)).toEqual([]);
   });
 });
+
+describe("limits and account deletion", () => {
+  it("stops new topics at the cap but still returns ones you already have", async () => {
+    const service = new PrepUpService(new InMemoryRepository(), () => new Date("2026-11-01T09:00:00Z"), { maxTopics: 2 });
+    const me = await service.resolveActor("user-1");
+    await service.addTopic(me, { term: "RAG" });
+    await service.addTopic(me, { term: "MCP" });
+    await expect(service.addTopic(me, { term: "Evals" })).rejects.toMatchObject({
+      code: "rule",
+      message: expect.stringContaining("2 topics"),
+    });
+    expect((await service.addTopic(me, { term: "rag" })).created).toBe(false);
+
+    // Deleting one frees a slot, and another user's deck is unaffected.
+    await service.deleteTopic(me, (await service.findByTerm(me, "MCP")).id);
+    expect((await service.addTopic(me, { term: "Evals" })).created).toBe(true);
+    const other = await service.resolveActor("user-2");
+    expect((await service.addTopic(other, { term: "Agents" })).created).toBe(true);
+  });
+
+  it("deletes everything a user has and leaves everyone else alone", async () => {
+    const { service } = setup();
+    const alice = await service.resolveActor("alice");
+    const bob = await service.resolveActor("bob");
+    const { topic } = await service.addTopic(alice, { term: "RAG" });
+    await service.recordReview(alice, { term: "RAG", score: 3, feedback: "ok", explanation: "Retrieve, then generate." });
+    await service.addTopic(bob, { term: "RAG" });
+
+    await service.deleteAccount(alice);
+    expect(await service.listTopics(bob)).toHaveLength(1);
+
+    // Signing in again starts a new, empty deck; the old ids are gone.
+    const again = await service.resolveActor("alice");
+    expect(again.workspaceId).not.toBe(alice.workspaceId);
+    expect(await service.listTopics(again)).toEqual([]);
+    await expect(service.getTopic(again, topic.id)).rejects.toMatchObject({ code: "not_found" });
+  });
+});

@@ -5,6 +5,7 @@
  */
 import {
   AddTopicInput,
+  DEFAULT_MAX_TOPICS,
   ListTopicsInput,
   RecordReviewInput,
   SetScoreInput,
@@ -27,6 +28,11 @@ export interface Actor {
 
 export type Clock = () => Date;
 
+/** Caps the host can tune; they keep one account from filling a shared database. */
+export interface Limits {
+  maxTopics: number;
+}
+
 function parse<T extends z.ZodType>(schema: T, input: unknown): z.output<T> {
   const result = schema.safeParse(input);
   if (!result.success) {
@@ -47,6 +53,7 @@ export class PrepUpService {
   constructor(
     private readonly repo: PrepUpRepository,
     private readonly clock: Clock = () => new Date(),
+    private readonly limits: Limits = { maxTopics: DEFAULT_MAX_TOPICS },
   ) {}
 
   async resolveActor(userId: string): Promise<Actor> {
@@ -58,10 +65,16 @@ export class PrepUpService {
   async addTopic(actor: Actor, input: unknown) {
     const { term, sourceUrl } = parse(AddTopicInput, input);
     const now = this.clock();
+    const normalizedTerm = normalizeTerm(term);
+    // The cap only stops new topics: capturing one you already have still returns it.
+    const existing = await this.repo.findTopicByNormalizedTerm(actor.workspaceId, normalizedTerm);
+    if (!existing && (await this.repo.countTopics(actor.workspaceId)) >= this.limits.maxTopics) {
+      throw new DomainError("rule", `Your deck is full (${this.limits.maxTopics} topics). Delete one to add another.`);
+    }
     const { record, created } = await this.repo.insertTopicIfAbsent({
       workspaceId: actor.workspaceId,
       term,
-      normalizedTerm: normalizeTerm(term),
+      normalizedTerm,
       sourceUrl: sourceUrl ?? null,
       createdBy: actor.userId,
       createdAt: now,
@@ -152,6 +165,11 @@ export class PrepUpService {
     const deleted = await this.repo.deleteTopic(actor.workspaceId, topicId);
     if (!deleted) throw new DomainError("not_found", "Topic not found");
     return { term: topic.term };
+  }
+
+  /** "Delete my data": everything PrepUp holds for this user. Signing in again starts an empty deck. */
+  async deleteAccount(actor: Actor): Promise<void> {
+    await this.repo.deleteUserData(actor.userId);
   }
 
   async history(actor: Actor, topicId: string): Promise<ReviewEventView[]> {
