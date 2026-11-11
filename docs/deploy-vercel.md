@@ -74,7 +74,7 @@ DATABASE_URL='postgres://...session-pooler...:5432/postgres' pnpm db:migrate
 - Each user gets 120 requests a minute, 5,000 a day and 500 topics. Change them in Vercel with `RATE_LIMIT_PER_MINUTE`, `RATE_LIMIT_PER_DAY` and `MAX_TOPICS_PER_USER`, then redeploy.
 - The request limits need the `rate_limits` table. Until the migration above has run, requests are allowed and the function logs "Rate limit check failed".
 - The Claude setup page and per-user testing styles need the `user_settings` table. Until the migration has run, saving a style fails and Claude uses the default style.
-- The costs page (`/#/costs`) is public and needs no migration. Set `SUPPORT_URL` (your Buy Me a Coffee link, `https://` only) to show a support link on it and at the foot of the deck; set `HOSTING_COST_PER_MONTH` and `DATABASE_LIMIT_MB` when you move to paid plans. Redeploy after changing them.
+- The costs page (`/costs`) is public and needs no migration. Set `SUPPORT_URL` (your Buy Me a Coffee link, `https://` only) to show a support link on it and at the foot of every screen; set `HOSTING_COST_PER_MONTH` and `DATABASE_LIMIT_MB` when you move to paid plans. Redeploy after changing them.
 - Topic links ("builds on") need the `topic_links` table. Until the migration has run, the deck works and shows no links; adding a link fails, and the function logs "topic_links is missing".
 - Nightly backups are off until you add two secrets: see [backups.md](backups.md).
 

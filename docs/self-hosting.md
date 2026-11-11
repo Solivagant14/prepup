@@ -43,7 +43,7 @@ Optional limits, with their defaults:
 | `MAX_TOPICS_PER_USER` | 500 | Topics per deck (500 is the maximum) |
 | `AUTH_AUDIENCE` | `authenticated` | The `aud` claim a token must carry |
 
-The public costs page (`/#/costs`) works with no settings. To make it describe your copy:
+The public costs page (`/costs`) works with no settings. To make it describe your copy:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -61,7 +61,7 @@ Open your site, sign in, and go to **Claude setup**. It shows your connector URL
 ## 5. Before you invite anyone
 
 - Turn on nightly backups: [backups.md](backups.md).
-- Tell people what you store: their topics, scores, explanations, test answers and sign-in email. They can remove all but the email with **Delete my data**; you can delete the sign-in record in Supabase under Authentication › Users.
+- Tell people what you store: their topics, scores, explanations, test answers and sign-in email. They can remove all but the email with **Erase all my data** on the Account screen; you can delete the sign-in record in Supabase under Authentication › Users.
 
 ## Costs when you outgrow free
 

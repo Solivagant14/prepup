@@ -6,24 +6,16 @@ import { useQuery } from "@tanstack/react-query";
 import type { HostStatusView } from "@prepup/contracts";
 import { loadHostStatus } from "../lib/api.js";
 import { databaseRoom, formatUsd, plural, supportLabel } from "../lib/costs.js";
+import { PATHS } from "../lib/route.js";
 import { HostLinks } from "./HostLinks.js";
+import { Link } from "./Link.js";
 
-export function Costs() {
+/** `standalone` is the signed-out view: with no frame around it, the page brings its own top bar. */
+export function Costs({ standalone = false }: { standalone?: boolean }) {
   const status = useQuery({ queryKey: ["host-status"], queryFn: loadHostStatus });
 
-  return (
+  const page = (
     <div className="page setup">
-      <header className="topbar">
-        <a className="brand" href="#/">
-          PrepUp
-        </a>
-        <div className="topbar-right">
-          <a className="link-btn" href="#/">
-            Back to PrepUp
-          </a>
-        </div>
-      </header>
-
       <div className="setup-head">
         <h1>What PrepUp costs</h1>
         <p>PrepUp is free to use. This page shows what this copy costs to run and how much room it has left.</p>
@@ -45,9 +37,25 @@ export function Costs() {
               stays in your own database.
             </p>
           </section>
-          <HostLinks links={status.data} showCosts={false} />
+          {standalone && <HostLinks links={status.data} showCosts={false} />}
         </>
       )}
+    </div>
+  );
+  if (!standalone) return page;
+  return (
+    <div className="app">
+      <header className="appbar">
+        <div className="appbar-in">
+          <Link to={PATHS.deck} className="brand">
+            PrepUp
+          </Link>
+          <Link to={PATHS.deck} className="btn appbar-end">
+            Sign in
+          </Link>
+        </div>
+      </header>
+      <main>{page}</main>
     </div>
   );
 }

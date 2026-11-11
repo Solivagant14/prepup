@@ -31,8 +31,8 @@ Add the connector once on the web or desktop app; it then works in Claude on you
 
 ## What it costs, and your data
 
-- **Free to use.** The hosted copy runs on free hosting plans. Its live [costs page](https://prepup-amber.vercel.app/#/costs) shows what it costs to run, how full it is, and the limits each person gets (500 topics; 120 requests a minute).
-- **Your data:** your topics, scores, explanations, test answers and sign-in email are stored. Only you can read your deck. **Delete my data** at the foot of the page removes everything except the sign-in record.
+- **Free to use.** The hosted copy runs on free hosting plans. Its live [costs page](https://prepup-amber.vercel.app/costs) shows what it costs to run, how full it is, and the limits each person gets (500 topics; 120 requests a minute).
+- **Your data:** your topics, scores, explanations, test answers and sign-in email are stored. Only you can read your deck. **Erase all my data** on the Account screen removes everything except the sign-in record.
 - **Open source** under the [MIT license](LICENSE). To run your own copy on free plans, see [docs/self-hosting.md](docs/self-hosting.md).
 
 The rest of this page is for people who want to know how it's built, or to work on it.
@@ -85,10 +85,10 @@ Built to be shared on free tiers, so one account can't crowd out the rest:
 - **Request limits per user:** 120 a minute and 5,000 a day, counted in Postgres so every serverless instance sees the same numbers. Over the limit, the API answers `429` with `Retry-After`.
 - **500 topics per deck.** The cap is a core rule, so the web app and Claude hit the same wall.
 - **Tokens are checked three ways:** signed by the Supabase project's keys, issued by that project, and carrying the audience Supabase gives signed-in users. Use a Supabase project that serves only PrepUp.
-- **Delete my data** (foot of the page) removes every topic, score, explanation and history row you have.
+- **Erase all my data** (Account screen) removes every topic, score, explanation and history row you have.
 - **Nightly encrypted backups** through GitHub Actions: see [docs/backups.md](docs/backups.md).
 
-- **A public costs page** (`#/costs`, no sign-in) shows the host's monthly cost, how full the database is, and these limits. It gives totals only, and the totals are read at most once every five minutes however many people open it. A host can add a support link with `SUPPORT_URL`.
+- **A public costs page** (`/costs`, no sign-in) shows the host's monthly cost, how full the database is, and these limits. It gives totals only, and the totals are read at most once every five minutes however many people open it. A host can add a support link with `SUPPORT_URL`.
 
 The limits and the costs page settings are environment variables (`.env.example`).
 

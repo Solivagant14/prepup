@@ -114,7 +114,7 @@ export interface PrepUpRepository {
   saveTestingStyle(userId: string, text: string, now: Date): Promise<void>;
 
   /**
-   * "Delete my data": removes the user's personal workspace with every topic in
+   * "Erase all my data": removes the user's personal workspace with every topic in
    * it, plus their settings, events, links and memberships anywhere else.
    */
   deleteUserData(userId: string): Promise<void>;

@@ -34,9 +34,7 @@ button { cursor: pointer; }
 .page { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; display: flex; flex-direction: column; gap: 24px; }
 @media (min-width: 720px) { .page { padding: 28px 32px 64px; } }
 
-.topbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; }
 .brand { font-size: 16px; font-weight: 500; letter-spacing: -0.01em; }
-.topbar-right { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
 .link-btn { background: none; border: none; padding: 8px 4px; color: var(--muted); font-size: 13px; }
 .link-btn:hover { color: var(--ink); }
 
@@ -108,7 +106,6 @@ button { cursor: pointer; }
   .tracker { padding: 16px; gap: 16px; }
   .tracker-big { font-size: 26px; }
   .tracker-stats { gap: 24px; }
-  .topbar-right > span { display: none; }
   .capture input { font-size: 18px; }
 }
 
@@ -198,13 +195,8 @@ textarea.explanation { width: 100%; padding: 12px 14px; border: 1px solid var(--
 .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
-/* Foot of the page: account actions that should be findable but never in the way. */
-.page-foot { display: flex; justify-content: center; margin-top: 16px; }
-.page-foot .confirm-delete { width: 100%; max-width: 520px; }
-
 /* Links about this copy: costs, source, support. */
 .host-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 16px; }
-.host-links + .page-foot { margin-top: -20px; }
 .auth .host-links { margin-top: 0; }
 .auth-lead { margin: 0; color: var(--ink-2); }
 .auth-hint { margin: -6px 0 0; font-size: 13px; }
@@ -223,6 +215,59 @@ a.btn.primary { color: var(--btn-ink); }
 .room-bar { height: 10px; border-radius: 5px; background: var(--sunken); overflow: hidden; }
 .room-bar > span { display: block; height: 100%; border-radius: 5px; background: var(--accent); }
 .room-bar.full > span { background: var(--rose); }
+
+/* The frame: a top bar everywhere, and on a phone the sections in a bar at the bottom. */
+.app { min-height: 100dvh; display: flex; flex-direction: column; }
+.app > main { flex: 1; }
+.appbar { position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--line); }
+.appbar-in { max-width: 1120px; margin: 0 auto; height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 28px; }
+.appbar .brand { display: inline-flex; align-items: center; height: 44px; font-size: 17px; }
+.appbar-end { margin-left: auto; }
+.appnav { display: none; flex: 1; gap: 4px; }
+.appnav a { display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--ink-2); text-decoration: none; }
+.appnav a:hover { background: var(--sunken); color: var(--ink); }
+.appnav a[aria-current="page"] { background: var(--sunken); color: var(--ink); }
+.account-menu { display: none; position: relative; margin-left: auto; }
+.avatar { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 1px solid #d9dbfb; background: #eef0ff; color: #312e81; font-size: 14px; font-weight: 500; }
+.avatar:hover, .avatar[aria-expanded="true"], .avatar[aria-current="page"] { border-color: var(--accent); }
+.menu { position: absolute; right: 0; top: calc(100% + 8px); width: 264px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 24px rgba(24, 24, 27, 0.12), 0 2px 6px rgba(24, 24, 27, 0.06); }
+.menu-who { padding: 8px 10px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.menu-how { font-size: 12px; color: var(--muted); }
+.menu-email { font-size: 14px; overflow-wrap: anywhere; }
+.menu-item { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 10px; border: none; border-radius: 8px; background: none; color: var(--ink); font-size: 14px; text-align: left; text-decoration: none; }
+.menu-item:hover { background: var(--sunken); }
+.menu-item svg { color: var(--ink-2); }
+.menu-end { margin-top: 6px; border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; height: 46px; padding-top: 6px; }
+.app-foot { padding: 0 16px 28px; }
+.app-foot .host-links { margin-top: 0; }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; border-top: 1px solid var(--line); background: var(--surface); padding-bottom: env(safe-area-inset-bottom); }
+.tabbar a { flex: 1; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); font-size: 11px; font-weight: 500; text-decoration: none; }
+.tabbar a[aria-current="page"] { color: var(--accent); }
+.app .page { padding-bottom: 40px; }
+@media (max-width: 719px) {
+  .app { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
+}
+@media (min-width: 720px) {
+  .appbar-in { padding: 0 32px; }
+  .appnav { display: flex; }
+  .account-menu { display: block; }
+  .tabbar { display: none; }
+}
+
+/* Account screen */
+.account-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.account-email { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.account-row .btn, .danger-zone .btn { height: 44px; }
+.danger-zone { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.danger-zone > div { flex: 1 1 280px; }
+.danger-zone h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.danger-zone p { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
+.btn.danger-outline { border-color: var(--rose); color: var(--rose); }
+.btn.danger-outline:hover { background: #fbf1f3; }
+dialog.confirm { width: min(440px, calc(100vw - 32px)); }
+.confirm-title { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
+.confirm-text { margin: -8px 0 0; font-size: 14px; color: var(--ink-2); }
+dialog.confirm .btn { height: 44px; }
 
 /* Claude setup page */
 a.link-btn, a.brand { text-decoration: none; }

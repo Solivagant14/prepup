@@ -8,27 +8,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { Api, ConnectorInfo } from "../lib/api.js";
 
-export function ClaudeSetup({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
+export function ClaudeSetup({ api }: { api: Api }) {
   const info = useQuery({ queryKey: ["connector"], queryFn: api.connector });
 
   return (
     <div className="page setup">
-      <header className="topbar">
-        <a className="brand" href="#/">
-          PrepUp
-        </a>
-        <div className="topbar-right">
-          <a className="link-btn" href="#/">
-            Back to your deck
-          </a>
-          {onSignOut && (
-            <button type="button" className="link-btn" onClick={onSignOut}>
-              Sign out
-            </button>
-          )}
-        </div>
-      </header>
-
       <div className="setup-head">
         <h1>Claude setup</h1>
         <p>PrepUp has no AI of its own. Tests run in your Claude app, and the scores land in your deck.</p>
