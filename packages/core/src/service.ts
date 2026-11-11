@@ -273,7 +273,7 @@ export class PrepUpService {
     return this.getSettings(actor);
   }
 
-  /** "Delete my data": everything PrepUp holds for this user. Signing in again starts an empty deck. */
+  /** "Erase all my data": everything PrepUp holds for this user. Signing in again starts an empty deck. */
   async deleteAccount(actor: Actor): Promise<void> {
     await this.repo.deleteUserData(actor.userId);
   }

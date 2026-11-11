@@ -185,7 +185,7 @@ export function createApp(opts: AppOptions) {
     }),
   );
 
-  // "Delete my data". Web only on purpose: Claude has no tool for it.
+  // "Erase all my data". Web only on purpose: Claude has no tool for it.
   app.delete("/api/account", async (c) => {
     await svc.deleteAccount(c.var.actor);
     return c.json({ deleted: true });
