@@ -2,24 +2,28 @@
 import type { OAuthProvider } from "@prepup/contracts";
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
+import { Costs } from "./components/Costs.js";
 import { ClaudeSetup } from "./components/ClaudeSetup.js";
 import { Deck } from "./components/Deck.js";
 import { SignIn } from "./components/SignIn.js";
-import { createApi, loadConfig, type Api, type AppConfig } from "./lib/api.js";
-import { CLAUDE_SETUP, useHash } from "./lib/route.js";
+import { createApi, loadConfig, type Api, type AppConfig, type HostLinkTargets } from "./lib/api.js";
+import { CLAUDE_SETUP, COSTS, useHash } from "./lib/route.js";
 
 export function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const devApi = useMemo(() => createApi(async () => null, "dev"), []);
+  const hash = useHash();
 
   useEffect(() => {
     loadConfig().then(setConfig, (e: Error) => setError(e.message));
   }, []);
 
   if (error) return <p className="auth error">{error}</p>;
+  // The costs page is public, so it shows before sign-in and without any Supabase settings.
+  if (hash === COSTS) return <Costs />;
   if (!config) return null;
-  if (config.authMode === "dev") return <Home api={devApi} />;
+  if (config.authMode === "dev") return <Home api={devApi} links={config} />;
   if (!config.supabaseUrl || !config.supabasePublishableKey) {
     return <p className="auth error">PrepUp isn't configured yet (missing Supabase settings).</p>;
   }
@@ -28,16 +32,27 @@ export function App() {
       url={config.supabaseUrl}
       publishableKey={config.supabasePublishableKey}
       providers={config.providers ?? []}
+      links={config}
     />
   );
 }
 
 /** The signed-in app: the deck, or the Claude setup page. */
-function Home(props: { api: Api; onSignOut?: () => void }) {
-  return useHash() === CLAUDE_SETUP ? <ClaudeSetup {...props} /> : <Deck {...props} />;
+function Home({ links, ...props }: { api: Api; links: HostLinkTargets; onSignOut?: () => void }) {
+  return useHash() === CLAUDE_SETUP ? <ClaudeSetup {...props} /> : <Deck {...props} links={links} />;
 }
 
-function SupabaseApp({ url, publishableKey, providers }: { url: string; publishableKey: string; providers: OAuthProvider[] }) {
+function SupabaseApp({
+  url,
+  publishableKey,
+  providers,
+  links,
+}: {
+  url: string;
+  publishableKey: string;
+  providers: OAuthProvider[];
+  links: HostLinkTargets;
+}) {
   const supabase = useMemo<SupabaseClient>(() => createClient(url, publishableKey), [url, publishableKey]);
   const [session, setSession] = useState<Session | null | undefined>(undefined);
 
@@ -57,6 +72,6 @@ function SupabaseApp({ url, publishableKey, providers }: { url: string; publisha
   );
 
   if (session === undefined) return null;
-  if (!session) return <SignIn supabase={supabase} providers={providers} />;
-  return <Home api={api} onSignOut={() => void supabase.auth.signOut()} />;
+  if (!session) return <SignIn supabase={supabase} providers={providers} links={links} />;
+  return <Home api={api} links={links} onSignOut={() => void supabase.auth.signOut()} />;
 }

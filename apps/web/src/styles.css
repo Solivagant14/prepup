@@ -202,6 +202,28 @@ textarea.explanation { width: 100%; padding: 12px 14px; border: 1px solid var(--
 .page-foot { display: flex; justify-content: center; margin-top: 16px; }
 .page-foot .confirm-delete { width: 100%; max-width: 520px; }
 
+/* Links about this copy: costs, source, support. */
+.host-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 16px; }
+.host-links + .page-foot { margin-top: -20px; }
+.auth .host-links { margin-top: 0; }
+.auth-lead { margin: 0; color: var(--ink-2); }
+.auth-hint { margin: -6px 0 0; font-size: 13px; }
+
+/* Costs page */
+.cost-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px; }
+.cost-row > div { flex: none; }
+.cost-note { flex: 1 1 280px; margin: 0; font-size: 14px; color: var(--ink-2); }
+.cost-support { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 14px 16px; border-radius: 12px; background: var(--sunken); font-size: 14px; color: var(--ink-2); }
+.cost-support span { flex: 1 1 260px; }
+a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: var(--ink); }
+a.btn.primary { color: var(--btn-ink); }
+.room { display: flex; flex-direction: column; gap: 8px; }
+.room-line { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.room-line .mono { font-size: 13px; color: var(--ink-2); }
+.room-bar { height: 10px; border-radius: 5px; background: var(--sunken); overflow: hidden; }
+.room-bar > span { display: block; height: 100%; border-radius: 5px; background: var(--accent); }
+.room-bar.full > span { background: var(--rose); }
+
 /* Claude setup page */
 a.link-btn, a.brand { text-decoration: none; }
 a.brand { color: inherit; }

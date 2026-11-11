@@ -134,6 +134,25 @@ export const UpdateSettingsInput = z.object({
 });
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
 
+/** How much of the shared host is in use. Totals only: nothing here identifies a person or a topic. */
+export interface HostUsage {
+  people: number;
+  topics: number;
+  /** Size of the database on disk, or null when the host can't measure it. */
+  databaseBytes: number | null;
+}
+
+/** What the public costs page shows: what the host pays, what it has room for, and each person's limits. */
+export interface HostStatusView {
+  monthlyCostUsd: number;
+  supportUrl: string | null;
+  sourceUrl: string;
+  usage: HostUsage;
+  databaseLimitBytes: number;
+  /** Request limits are null when the host sets none. */
+  limits: { topicsPerPerson: number; requestsPerMinute: number | null; requestsPerDay: number | null };
+}
+
 export interface UserSettingsView {
   /** How this user wants to be tested; the default preset until they change it. */
   testingStyle: string;

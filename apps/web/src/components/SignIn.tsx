@@ -1,9 +1,19 @@
 import type { OAuthProvider } from "@prepup/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useState, type FormEvent } from "react";
+import type { HostLinkTargets } from "../lib/api.js";
+import { HostLinks } from "./HostLinks.js";
 import { ProviderIcon, PROVIDER_LABEL } from "./ProviderIcon.js";
 
-export function SignIn({ supabase, providers }: { supabase: SupabaseClient; providers: OAuthProvider[] }) {
+export function SignIn({
+  supabase,
+  providers,
+  links,
+}: {
+  supabase: SupabaseClient;
+  providers: OAuthProvider[];
+  links: HostLinkTargets;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -32,9 +42,11 @@ export function SignIn({ supabase, providers }: { supabase: SupabaseClient; prov
     <main className="auth">
       <form onSubmit={(e) => void submit("in", e)}>
         <h1>PrepUp</h1>
-        <p className="muted" style={{ margin: 0 }}>
-          Sign in with the account you use for the Claude connector.
+        <p className="auth-lead">
+          Keep track of what you're learning. Add a term the moment you hear it, let your own Claude test you on it, and
+          watch your deck darken as it sticks.
         </p>
+        <p className="muted auth-hint">Free to use. If you've connected Claude already, sign in with the same account.</p>
         {providers.length > 0 && (
           <>
             {providers.map((p) => (
@@ -72,6 +84,7 @@ export function SignIn({ supabase, providers }: { supabase: SupabaseClient; prov
         <p className="error" role="alert">
           {message}
         </p>
+        <HostLinks links={links} />
       </form>
     </main>
   );

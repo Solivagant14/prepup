@@ -17,6 +17,7 @@ import {
   UpdateSettingsInput,
   UpdateTopicInput,
   type EventSource,
+  type HostUsage,
   type ReviewEventView,
   type TopicFilter,
   type TopicRef,
@@ -275,6 +276,11 @@ export class PrepUpService {
   /** "Delete my data": everything PrepUp holds for this user. Signing in again starts an empty deck. */
   async deleteAccount(actor: Actor): Promise<void> {
     await this.repo.deleteUserData(actor.userId);
+  }
+
+  /** How full the shared host is. Public and anonymous: counts only, no actor. */
+  async hostUsage(): Promise<HostUsage> {
+    return this.repo.hostUsage();
   }
 
   async history(actor: Actor, topicId: string): Promise<ReviewEventView[]> {

@@ -627,6 +627,8 @@ describe("deployment glue", () => {
       supabaseUrl: SUPABASE_URL,
       supabasePublishableKey: "sb_publishable_test",
       providers: [],
+      supportUrl: null,
+      sourceUrl: "https://github.com/Solivagant14/prepup",
     });
   });
 
@@ -668,5 +670,110 @@ describe("social sign-in", () => {
 
     const plain = await (await app.request("/oauth/consent?authorization_id=abc")).text();
     expect(plain).not.toContain("data-provider=");
+  });
+});
+
+describe("public costs page", () => {
+  const base = { DATABASE_URL: "postgres://x", SUPABASE_URL };
+  const hosted = (service = new PrepUpService(new InMemoryRepository())) =>
+    createApp({
+      service,
+      auth: new DevAuthenticator(),
+      publicUrl: PUBLIC_URL,
+      rateLimit: { store: new InMemoryRateLimitStore(), perMinute: 120, perDay: 5000 },
+      host: {
+        monthlyCostUsd: 45,
+        supportUrl: "https://buymeacoffee.com/someone",
+        sourceUrl: "https://github.com/someone/fork",
+        databaseLimitMb: 8000,
+        maxTopics: 200,
+      },
+    });
+
+  it("is open to anyone and reports a free copy by default", async () => {
+    await app.request("/api/topics", as(USER, { method: "POST", body: JSON.stringify({ term: "RAG" }) }));
+    await app.request("/api/topics", as(OTHER, { method: "POST", body: JSON.stringify({ term: "Embeddings" }) }));
+
+    const res = await app.request("/host-status");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=60, s-maxage=300");
+    expect(await res.json()).toEqual({
+      monthlyCostUsd: 0,
+      supportUrl: null,
+      sourceUrl: "https://github.com/Solivagant14/prepup",
+      usage: { people: 2, topics: 2, databaseBytes: null },
+      databaseLimitBytes: 500 * 1024 * 1024,
+      limits: { topicsPerPerson: 500, requestsPerMinute: null, requestsPerDay: null },
+    });
+  });
+
+  it("shows what the host configured: cost, support link, source and limits", async () => {
+    const withHost = hosted();
+    expect(await (await withHost.request("/host-status")).json()).toMatchObject({
+      monthlyCostUsd: 45,
+      supportUrl: "https://buymeacoffee.com/someone",
+      sourceUrl: "https://github.com/someone/fork",
+      databaseLimitBytes: 8000 * 1024 * 1024,
+      limits: { topicsPerPerson: 200, requestsPerMinute: 120, requestsPerDay: 5000 },
+    });
+    expect(await (await withHost.request("/app-config")).json()).toMatchObject({
+      supportUrl: "https://buymeacoffee.com/someone",
+      sourceUrl: "https://github.com/someone/fork",
+    });
+  });
+
+  it("gives totals only: no terms, ids or anything about one person", async () => {
+    await app.request("/api/topics", as(USER, { method: "POST", body: JSON.stringify({ term: "Secret project" }) }));
+    const text = await (await app.request("/host-status")).text();
+    expect(text).not.toContain("Secret");
+    expect(text).not.toContain(USER);
+  });
+
+  it("reads the totals once for many visits, and tries again after a failure", async () => {
+    const service = new PrepUpService(new InMemoryRepository());
+    let calls = 0;
+    let fail = true;
+    service.hostUsage = async () => {
+      calls++;
+      if (fail) throw new Error("database is waking up");
+      return { people: 1, topics: 3, databaseBytes: 1024 };
+    };
+    const withHost = hosted(service);
+
+    expect((await withHost.request("/host-status")).status).toBe(500);
+    fail = false;
+    const visits = await Promise.all(Array.from({ length: 20 }, () => withHost.request("/host-status")));
+    expect(visits.every((v) => v.status === 200)).toBe(true);
+    expect(await visits[0]!.json()).toMatchObject({ usage: { people: 1, topics: 3, databaseBytes: 1024 } });
+    expect(calls).toBe(2);
+  });
+
+  it("isn't counted against anyone's request limit", async () => {
+    const store = new InMemoryRateLimitStore();
+    const limited = createApp({
+      service: new PrepUpService(new InMemoryRepository()),
+      auth: new DevAuthenticator(),
+      publicUrl: PUBLIC_URL,
+      rateLimit: { store, perMinute: 1, perDay: 5 },
+    });
+    for (let i = 0; i < 5; i++) expect((await limited.request("/host-status", as(USER))).status).toBe(200);
+    expect((await limited.request("/api/topics", as(USER))).status).toBe(200);
+  });
+
+  it("reads the costs settings, and refuses a support link that isn't https", () => {
+    expect(loadConfig(base)).toMatchObject({
+      HOSTING_COST_PER_MONTH: 0,
+      DATABASE_LIMIT_MB: 500,
+      SOURCE_URL: "https://github.com/Solivagant14/prepup",
+    });
+    expect(
+      loadConfig({ ...base, HOSTING_COST_PER_MONTH: "45", DATABASE_LIMIT_MB: "8000", SUPPORT_URL: " https://buymeacoffee.com/someone " }),
+    ).toMatchObject({ HOSTING_COST_PER_MONTH: 45, DATABASE_LIMIT_MB: 8000, SUPPORT_URL: "https://buymeacoffee.com/someone" });
+    // A blank variable, as hosts often save, means "not set".
+    expect(loadConfig(base).SUPPORT_URL).toBeUndefined();
+    expect(loadConfig({ ...base, SUPPORT_URL: "" }).SUPPORT_URL).toBeUndefined();
+    expect(() => loadConfig({ ...base, SUPPORT_URL: "javascript:alert(1)" })).toThrow(/SUPPORT_URL/);
+    expect(() => loadConfig({ ...base, SUPPORT_URL: "http://example.com" })).toThrow(/SUPPORT_URL/);
+    expect(() => loadConfig({ ...base, HOSTING_COST_PER_MONTH: "-1" })).toThrow(/HOSTING_COST_PER_MONTH/);
   });
 });

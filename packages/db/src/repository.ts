@@ -15,7 +15,7 @@ import type {
   TopicState,
 } from "@prepup/core";
 import type { EventSource } from "@prepup/contracts";
-import { and, count, desc, eq, isNotNull, or } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, or, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema.js";
 import {
@@ -316,5 +316,20 @@ export class PostgresRepository implements PrepUpRepository {
       lastTestAt: lastTest.get(r.topic.id) ?? null,
       lastExplanation: lastExplanation.get(r.topic.id) ?? null,
     }));
+  }
+
+  /** Counts and the database's size on disk. Nothing here is per workspace, so nothing is scoped. */
+  async hostUsage() {
+    const [[people], [topicRows], sized] = await Promise.all([
+      this.db.select({ n: count() }).from(workspaces).where(eq(workspaces.personal, true)),
+      this.db.select({ n: count() }).from(topics),
+      this.db.execute<{ bytes: string | number }>(sql`select pg_database_size(current_database()) as bytes`),
+    ]);
+    // Drivers disagree on the shape of a raw result: node-postgres wraps the rows, PGlite may too.
+    const row = (Array.isArray(sized) ? sized[0] : (sized as { rows?: Array<{ bytes: string | number }> }).rows?.[0]) as
+      | { bytes: string | number }
+      | undefined;
+    const bytes = row ? Number(row.bytes) : NaN;
+    return { people: people?.n ?? 0, topics: topicRows?.n ?? 0, databaseBytes: Number.isFinite(bytes) ? bytes : null };
   }
 }

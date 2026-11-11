@@ -43,6 +43,17 @@ Optional limits, with their defaults:
 | `MAX_TOPICS_PER_USER` | 500 | Topics per deck (500 is the maximum) |
 | `AUTH_AUDIENCE` | `authenticated` | The `aud` claim a token must carry |
 
+The public costs page (`/#/costs`) works with no settings. To make it describe your copy:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `HOSTING_COST_PER_MONTH` | 0 | What the copy costs you a month, in US dollars |
+| `DATABASE_LIMIT_MB` | 500 | The database size your plan allows (Supabase Free is 500, Pro is 8000) |
+| `SUPPORT_URL` | empty | An `https://` link for people who want to chip in (Buy Me a Coffee, GitHub Sponsors). Empty hides it |
+| `SOURCE_URL` | this repo | Shown as "Source"; point it at your fork |
+
+The page shows totals for the whole copy: how many people and topics, and the database's size. It never shows anyone's topics.
+
 ## 4. Connect Claude
 
 Open your site, sign in, and go to **Claude setup**. It shows your connector URL and the steps.

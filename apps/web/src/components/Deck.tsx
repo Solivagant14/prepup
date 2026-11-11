@@ -2,10 +2,11 @@
 import type { TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type KeyboardEvent } from "react";
-import type { Api } from "../lib/api.js";
+import type { Api, HostLinkTargets } from "../lib/api.js";
 import { linkPairs, shownIn, summarize, TABS, type Tab } from "../lib/deck.js";
 import { CLAUDE_SETUP } from "../lib/route.js";
 import { DeleteAccount } from "./DeleteAccount.js";
+import { HostLinks } from "./HostLinks.js";
 import { GraphBoard } from "./GraphBoard.js";
 import { TopicCard } from "./TopicCard.js";
 import { TopicDialog } from "./TopicDialog.js";
@@ -27,7 +28,7 @@ function savedView(): ViewMode {
   }
 }
 
-export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
+export function Deck({ api, links, onSignOut }: { api: Api; links: HostLinkTargets; onSignOut?: () => void }) {
   const qc = useQueryClient();
   const topics = useQuery({ queryKey: ["topics"], queryFn: api.listTopics });
   const [tab, setTab] = useState<Tab>("all");
@@ -187,6 +188,7 @@ export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
         />
       )}
 
+      <HostLinks links={links} />
       <DeleteAccount
         api={api}
         topicCount={all.length}

@@ -332,6 +332,24 @@ describe("topic links", () => {
   });
 });
 
+describe("host usage", () => {
+  it("counts people and topics across workspaces and measures the database", async () => {
+    const empty = await service.hostUsage();
+    expect(empty).toMatchObject({ people: 0, topics: 0 });
+    expect(empty.databaseBytes).toBeGreaterThan(0);
+
+    const alice = await service.resolveActor(randomUUID());
+    const bob = await service.resolveActor(randomUUID());
+    await service.addTopic(alice, { term: "RAG" });
+    await service.addTopic(alice, { term: "Embeddings" });
+    await service.addTopic(bob, { term: "RAG" });
+    expect(await service.hostUsage()).toMatchObject({ people: 2, topics: 3 });
+
+    await service.deleteAccount(alice);
+    expect(await service.hostUsage()).toMatchObject({ people: 1, topics: 1 });
+  });
+});
+
 describe("user settings", () => {
   it("saves and replaces a testing style per user", async () => {
     const alice = await service.resolveActor(randomUUID());

@@ -12,7 +12,7 @@
 - Business rules live only in `packages/core`. Adapters (`apps/api` REST and MCP, `packages/db`) stay thin and call `PrepUpService`.
 - Input shapes are defined once in `packages/contracts` and reused by REST and MCP.
 - The core depends on the `PrepUpRepository` port, never on Drizzle or Postgres.
-- Every query is scoped by `workspace_id`, and by `user_id` for personal data.
+- Every query is scoped by `workspace_id`, and by `user_id` for personal data. The one exception is `hostUsage` (the public costs page): it returns host-wide counts only, never a row.
 - Scores are computed from `review_events`; never store a score on the topic.
 - Only `record_review` (a Claude test) resets the fade clock. Manual edits don't.
 - Links (`topic_links`, "builds on") never change a score or the fade clock. The core rejects loops; the graph functions are pure and live in `packages/core/src/links.ts`, which the web app imports as `@prepup/core/links`.

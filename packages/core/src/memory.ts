@@ -167,4 +167,8 @@ export class InMemoryRepository implements PrepUpRepository {
       lastExplanation: explainedAt ? { at: explainedAt.createdAt, source: explainedAt.source } : null,
     };
   }
+
+  async hostUsage() {
+    return { people: this.workspaces.size, topics: this.topics.length, databaseBytes: null };
+  }
 }
