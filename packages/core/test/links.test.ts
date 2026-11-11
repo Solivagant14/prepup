@@ -389,9 +389,16 @@ describe("fixed rules for links", () => {
     expect(byId.link!.rule).toMatch(/call link_topics only after they say yes/);
     expect(byId["prerequisites-first"]!.rule).toMatch(/builds on is weaker, test that prerequisite first/);
     for (const r of FIXED_RULES) expect(r.why.length).toBeGreaterThan(10);
+    // Titles are for people: everyday words, no tool names, and none of them in Claude's instructions.
+    for (const r of FIXED_RULES) {
+      expect(r.title.length).toBeGreaterThan(10);
+      expect(r.title).not.toMatch(/_|list topics|get topic|record review/i);
+    }
+    expect(new Set(FIXED_RULES.map((r) => r.title)).size).toBe(FIXED_RULES.length);
 
     const text = buildInstructions("Short and strict.");
     expect(text).toContain(`9. ${byId.link!.rule}`);
+    for (const r of FIXED_RULES) expect(text).not.toContain(r.title);
     expect(text).toContain("never change a score or the fade clock");
     expect(text).not.toMatch(/Forward Deployed|FDE|buzzword|interview/i);
   });

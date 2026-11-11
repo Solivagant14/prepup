@@ -286,7 +286,7 @@ describe("MCP", () => {
       url: string;
       tools: Array<{ name: string; description: string }>;
       prompts: Array<{ name: string }>;
-      fixedRules: Array<{ id: string; rule: string; why: string }>;
+      fixedRules: Array<{ id: string; title: string; rule: string; why: string }>;
       presets: Array<{ id: string }>;
       settings: { preset: string };
     };
@@ -299,6 +299,8 @@ describe("MCP", () => {
     expect(page.prompts.map((p) => p.name).sort()).toEqual(prompts.map((p) => p.name).sort());
     expect(page.fixedRules.map((r) => r.id)).toEqual(FIXED_RULES.map((r) => r.id));
     expect(page.fixedRules).toHaveLength(9);
+    // The page gets each rule twice: in everyday words, and exactly as Claude is told it.
+    expect(page.fixedRules.map((r) => [r.title, r.rule])).toEqual(FIXED_RULES.map((r) => [r.title, r.rule]));
     expect(page.presets.map((p) => p.id)).toEqual(["interviewer", "tutor", "drill"]);
     expect(page.settings.preset).toBe("interviewer");
     expect((await app.request("/api/connector")).status).toBe(401);

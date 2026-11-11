@@ -21,7 +21,7 @@ export interface ConnectorInfo {
   url: string;
   tools: Array<{ name: string; title: string; description: string; readOnly: boolean }>;
   prompts: Array<{ name: string; title: string; description: string }>;
-  fixedRules: Array<{ id: string; rule: string; why: string }>;
+  fixedRules: Array<{ id: string; title: string; rule: string; why: string }>;
   presets: Array<{ id: string; name: string; summary: string; text: string }>;
   settings: UserSettingsView;
 }

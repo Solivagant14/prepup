@@ -372,9 +372,24 @@ a.brand { color: inherit; }
 textarea.style-text { min-height: 150px; }
 .count { font-size: 12px; color: var(--muted); }
 .count.error { color: var(--rose); }
-.rules { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+.rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: 14px; }
+.rules li { padding: 10px 0; border-top: 1px solid var(--line); }
+.rules li:first-child { border-top: none; padding-top: 0; }
 .rules li span { display: block; }
-.rules .why { margin-top: 2px; font-size: 13px; color: var(--muted); }
+.rules li span:first-child { font-weight: 500; }
+.rules .why { margin-top: 2px; font-size: 13px; color: var(--ink-2); }
+.can-do { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: 14px; }
+.can-do li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.can-do li:first-child { border-top: none; padding-top: 0; }
+/* The exact text Claude receives: there for anyone who wants it, out of the way for everyone else. */
+details.more { border-top: 1px solid var(--line); margin: 0 -24px -22px; }
+details.more summary { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 24px; font-size: 13px; font-weight: 500; color: var(--ink-2); cursor: pointer; list-style: none; }
+details.more summary::-webkit-details-marker { display: none; }
+details.more summary::before { content: "+"; font-family: var(--mono); width: 12px; }
+details.more[open] summary::before { content: "−"; }
+details.more summary:hover { color: var(--ink); }
+details.more > :not(summary) { margin: 0 24px 22px; }
+.exact { padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--ink-2); }
 .tools { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .tools li { padding: 12px 0; border-top: 1px solid var(--line); }
 .tools li:first-child { border-top: none; padding-top: 0; }
@@ -386,6 +401,12 @@ textarea.style-text { min-height: 150px; }
 .badge.writes { background: #eef0ff; color: #312e81; }
 @media (max-width: 640px) {
   .panel { padding: 18px 16px; }
+  details.more { margin: 0 -16px -18px; }
+  details.more summary { padding: 0 16px; }
+  details.more > :not(summary) { margin: 0 16px 18px; }
+  .copy-row input, .copy-row .btn, .setup .sheet-actions .btn { height: 44px; }
+  .copy-row input, textarea.style-text { font-size: 16px; }
+  .preset { min-height: 44px; }
   .presets { grid-template-columns: 1fr; }
   .copy-row { flex-direction: column; }
 }
