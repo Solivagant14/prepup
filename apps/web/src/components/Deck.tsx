@@ -3,17 +3,43 @@ import type { TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type KeyboardEvent } from "react";
 import type { Api } from "../lib/api.js";
-import { shownIn, summarize, TABS, type Tab } from "../lib/deck.js";
+import { linkPairs, shownIn, summarize, TABS, type Tab } from "../lib/deck.js";
 import { CLAUDE_SETUP } from "../lib/route.js";
 import { DeleteAccount } from "./DeleteAccount.js";
+import { GraphBoard } from "./GraphBoard.js";
 import { TopicCard } from "./TopicCard.js";
 import { TopicDialog } from "./TopicDialog.js";
 import { Tracker } from "./Tracker.js";
+
+type ViewMode = "cards" | "graph";
+const VIEWS: { id: ViewMode; label: string }[] = [
+  { id: "cards", label: "Cards" },
+  { id: "graph", label: "Graph" },
+];
+const VIEW_KEY = "prepup.view";
+
+/** Which view was open last time, on this device. A convenience only: storage may be unavailable. */
+function savedView(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "graph" ? "graph" : "cards";
+  } catch {
+    return "cards";
+  }
+}
 
 export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
   const qc = useQueryClient();
   const topics = useQuery({ queryKey: ["topics"], queryFn: api.listTopics });
   const [tab, setTab] = useState<Tab>("all");
+  const [view, setView] = useState<ViewMode>(savedView);
+  const show = (next: ViewMode) => {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // Private windows may refuse storage; the view still switches.
+    }
+  };
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
@@ -43,6 +69,7 @@ export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
     fading_week: summary.fadingWeek,
     confident: summary.confident,
   };
+  const linkCount = linkPairs(all).length;
   const open: TopicView | undefined = all.find((t) => t.id === openId);
 
   return (
@@ -87,32 +114,65 @@ export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
 
       <Tracker summary={summary} />
 
-      <div className="toolbar">
-        <div className="tabs" role="tablist" aria-label="Filter topics">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" role="tab" className="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
-              {t.label} <span className="mono">{counts[t.id]}</span>
-            </button>
-          ))}
-        </div>
+      <div className="views" role="tablist" aria-label="View">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            role="tab"
+            id={`view-${v.id}`}
+            className="view-tab"
+            aria-selected={view === v.id}
+            aria-controls="deck-view"
+            onClick={() => show(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
       </div>
-      <p className="tab-hint">{TABS.find((t) => t.id === tab)!.hint}</p>
 
-      {topics.isLoading ? (
-        <p className="muted">Loading your deck…</p>
-      ) : topics.isError ? (
-        <p className="error">{(topics.error as Error).message}</p>
-      ) : shown.length === 0 ? (
-        <p className="empty">
-          {all.length === 0 ? "Your deck is empty. Add the first term you want to learn above." : "Nothing here right now."}
-        </p>
-      ) : (
-        <div className="grid">
-          {shown.map((t) => (
-            <TopicCard key={t.id} topic={t} onOpen={() => setOpenId(t.id)} />
-          ))}
-        </div>
+      {view === "cards" && (
+        <>
+          <div className="toolbar">
+            <div className="tabs" role="tablist" aria-label="Filter topics">
+              {TABS.map((t) => (
+                <button key={t.id} type="button" role="tab" className="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+                  {t.label} <span className="mono">{counts[t.id]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="tab-hint">{TABS.find((t) => t.id === tab)!.hint}</p>
+        </>
       )}
+      {view === "graph" && (
+        <p className="tab-hint view-hint">
+          {linkCount === 0
+            ? "No links yet. Open a card and add what it builds on, or ask Claude to link your topics."
+            : "Arrows run from a topic to what builds on it, so each path reads left to right."}{" "}
+          Drag to move, pinch or Ctrl + scroll to zoom, tap a topic to open it.
+        </p>
+      )}
+
+      <div id="deck-view" role="tabpanel" aria-labelledby={`view-${view}`}>
+        {topics.isLoading ? (
+          <p className="muted">Loading your deck…</p>
+        ) : topics.isError ? (
+          <p className="error">{(topics.error as Error).message}</p>
+        ) : all.length === 0 ? (
+          <p className="empty">Your deck is empty. Add the first term you want to learn above.</p>
+        ) : view === "graph" ? (
+          <GraphBoard topics={all} onOpen={setOpenId} />
+        ) : shown.length === 0 ? (
+          <p className="empty">Nothing here right now.</p>
+        ) : (
+          <div className="grid">
+            {shown.map((t) => (
+              <TopicCard key={t.id} topic={t} onOpen={() => setOpenId(t.id)} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {open && (
         <TopicDialog
