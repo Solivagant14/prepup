@@ -1,7 +1,11 @@
-/** The card pop-up: importance, score, explanation, links, freshness, history and the test prompt. */
+/**
+ * The card pop-up: importance, score, explanation, links, freshness, history
+ * and the test prompt. The title and the main action stay in view while the
+ * rest scrolls between them; on a phone it rises from the bottom as a sheet.
+ */
 import type { Importance, TopicRef, TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type SyntheticEvent } from "react";
 import type { Api } from "../lib/api.js";
 import {
   cardLook,
@@ -25,6 +29,13 @@ interface Props {
   onDeleted: (term: string) => void;
 }
 
+/** One "builds on" link, with the other topic's name for messages about it. */
+interface LinkPair {
+  topicId: string;
+  buildsOnId: string;
+  term: string;
+}
+
 export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDeleted }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const qc = useQueryClient();
@@ -36,6 +47,14 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  /** A link just removed, kept so it can be put back. */
+  const [removed, setRemoved] = useState<LinkPair | null>(null);
+  /** What the person was about to do when we stopped to ask about unsaved text. */
+  const [leaving, setLeaving] = useState<{ go: () => void } | null>(null);
+  const pressedBackdrop = useRef(false);
+  const more = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const d = ref.current;
@@ -52,9 +71,68 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
 
   const update = useMutation({
     mutationFn: (body: { importance?: Importance; explanation?: string }) => api.updateTopic(topic.id, body),
-    onSuccess: refresh,
+    onSuccess: (saved) => {
+      // Show the saved card at once, so "unsaved" clears without waiting for the deck to reload.
+      qc.setQueryData<TopicView[]>(["topics"], (list) => list?.map((t) => (t.id === saved.id ? saved : t)));
+      refresh();
+    },
     onError,
   });
+
+  const dirty = explanation !== topic.explanation;
+  const close = () => ref.current?.close();
+  /** Runs `go` now, or asks first when typed text would be lost. */
+  const attempt = (go: () => void) => {
+    setMenuOpen(false);
+    if (dirty) setLeaving({ go });
+    else go();
+  };
+  const save = (then?: () => void) =>
+    update.mutate(
+      { explanation },
+      {
+        onSuccess: () => {
+          setJustSaved(true);
+          then?.();
+        },
+      },
+    );
+  const discard = () => {
+    setExplanation(topic.explanation);
+    setJustSaved(false);
+  };
+
+  // Escape closes the innermost thing first: the menu, then a question, then the card.
+  const onCancel = (e: SyntheticEvent<HTMLDialogElement>) => {
+    if (menuOpen) {
+      e.preventDefault();
+      setMenuOpen(false);
+    } else if (leaving) {
+      e.preventDefault();
+      setLeaving(null);
+    } else if (confirmDelete) {
+      e.preventDefault();
+      setConfirmDelete(false);
+    } else if (dirty) {
+      e.preventDefault();
+      setLeaving({ go: close });
+    }
+  };
+  // A click on the dimmed area closes the card, but not a drag that began inside it (selecting text, say).
+  const onBackdropDown = (e: MouseEvent<HTMLDialogElement>) => {
+    pressedBackdrop.current = e.target === ref.current;
+  };
+  const onBackdropClick = (e: MouseEvent<HTMLDialogElement>) => {
+    if (e.target === ref.current && pressedBackdrop.current) attempt(close);
+  };
+  useEffect(() => {
+    if (!menuOpen) return;
+    const away = (e: PointerEvent) => {
+      if (!more.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [menuOpen]);
   const score = useMutation({
     mutationFn: (n: number) => api.setScore(topic.id, n),
     onSuccess: () => {
@@ -69,6 +147,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
     onSuccess: () => {
       setAdding(false);
       setQuery("");
+      setRemoved(null);
       refresh();
     },
     // The deck may have changed elsewhere (say, Claude linked something): reload it so the options are right.
@@ -79,17 +158,35 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
   };
   const link = useMutation({ mutationFn: (buildsOnId: string) => api.linkTopic(topic.id, buildsOnId), ...onLinkChange });
   const unlink = useMutation({
-    mutationFn: (pair: { topicId: string; buildsOnId: string }) => api.unlinkTopic(pair.topicId, pair.buildsOnId),
+    mutationFn: (pair: LinkPair) => api.unlinkTopic(pair.topicId, pair.buildsOnId),
+    ...onLinkChange,
+    onSuccess: (_topic: TopicView, pair: LinkPair) => {
+      onLinkChange.onSuccess();
+      setRemoved(pair);
+    },
+  });
+  /** Undo: puts a removed link back, whichever side of it this card is on. */
+  const relink = useMutation({
+    mutationFn: (pair: LinkPair) => api.linkTopic(pair.topicId, pair.buildsOnId),
     ...onLinkChange,
   });
-  const linking = link.isPending || unlink.isPending;
+  const linking = link.isPending || unlink.isPending || relink.isPending;
+  const undoNote = (side: "buildsOn" | "neededFor") =>
+    removed && (removed.topicId === topic.id) === (side === "buildsOn") ? (
+      <p className="undo-note" role="status">
+        Removed the link to {removed.term}.
+        <button type="button" disabled={linking} onClick={() => relink.mutate(removed)}>
+          Undo
+        </button>
+      </p>
+    ) : null;
   const found = adding ? prerequisiteOptions(topic, topics, query) : null;
 
-  const chips = (refs: TopicRef[], pairFor: (other: TopicRef) => { topicId: string; buildsOnId: string }) => (
+  const chips = (refs: TopicRef[], pairFor: (other: TopicRef) => LinkPair) => (
     <ul className="chips">
       {refs.map((other) => (
         <li key={other.id} className="chip">
-          <button type="button" className="chip-open" onClick={() => onOpenTopic(other.id)} aria-label={`Open ${other.term}`}>
+          <button type="button" className="chip-open" onClick={() => attempt(() => onOpenTopic(other.id))} aria-label={`Open ${other.term}`}>
             {other.term}
           </button>
           <button
@@ -131,28 +228,65 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
   const lastTested = topic.lastTestedAt ? `last tested ${daysAgo(topic.lastTestedAt)}` : "never tested by Claude";
 
   return (
-    <dialog ref={ref} className="sheet" aria-labelledby="sheet-title" onClose={onClose}>
-      <div className="sheet-body">
-        <div className="sheet-head">
-          <div>
-            <span className="sheet-level">
-              <span className="swatch" style={{ background: look.background }} />
-              {topic.level}
-            </span>
-            <h2 id="sheet-title" className="sheet-title">
-              {topic.term}
-            </h2>
-            {topic.sourceUrl && (
-              <a className="source-link" href={topic.sourceUrl} target="_blank" rel="noreferrer noopener">
-                {topic.sourceUrl}
-              </a>
+    <dialog
+      ref={ref}
+      className="card-sheet"
+      aria-labelledby="sheet-title"
+      onClose={onClose}
+      onCancel={onCancel}
+      onMouseDown={onBackdropDown}
+      onClick={onBackdropClick}
+    >
+      <header className="sheet-top">
+        <div className="sheet-top-text">
+          <span className="sheet-level">
+            <span className="swatch" style={{ background: look.background }} />
+            {topic.level}
+          </span>
+          <h2 id="sheet-title" className="sheet-title">
+            {topic.term}
+          </h2>
+          {topic.sourceUrl && (
+            <a className="source-link" href={topic.sourceUrl} target="_blank" rel="noreferrer noopener">
+              {topic.sourceUrl}
+            </a>
+          )}
+        </div>
+        <div className="sheet-top-actions">
+          <div className="sheet-more" ref={more}>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="More actions"
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              <span aria-hidden="true">⋯</span>
+            </button>
+            {menuOpen && (
+              <div className="menu">
+                <button
+                  type="button"
+                  className="menu-item danger"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setLeaving(null);
+                    setConfirmDelete(true);
+                  }}
+                >
+                  Delete card
+                </button>
+              </div>
             )}
           </div>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
-            ×
+          <button type="button" className="icon-btn" aria-label="Close" onClick={() => attempt(close)}>
+            <span aria-hidden="true">×</span>
           </button>
         </div>
+      </header>
 
+      <div className="sheet-scroll">
         <div className="fresh">
           <div className="fresh-row">
             <span className="fresh-title">{fresh ?? "Not fading: it can't drop below 1"}</span>
@@ -235,8 +369,28 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
             maxLength={4000}
             placeholder="In your own words, as you'd explain it to someone else"
             value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}
+            onChange={(e) => {
+              setExplanation(e.target.value);
+              setJustSaved(false);
+            }}
           />
+          {dirty ? (
+            <div className="explain-actions">
+              <span className="small">Not saved yet</span>
+              <div className="row-end">
+                <button type="button" className="btn" onClick={discard} disabled={update.isPending}>
+                  Discard
+                </button>
+                <button type="button" className="btn primary" onClick={() => save()} disabled={update.isPending}>
+                  {update.isPending ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <span className="small" role="status">
+              {justSaved ? "Saved" : ""}
+            </span>
+          )}
         </div>
 
         <div className="field">
@@ -246,7 +400,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
             </span>
             <span className="small">what to learn first</span>
           </div>
-          {topic.buildsOn.length > 0 && chips(topic.buildsOn, (other) => ({ topicId: topic.id, buildsOnId: other.id }))}
+          {topic.buildsOn.length > 0 && chips(topic.buildsOn, (other) => ({ topicId: topic.id, buildsOnId: other.id, term: other.term }))}
           {adding ? (
             <div className="link-search">
               <div className="link-search-row">
@@ -296,6 +450,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
               + Add prerequisite
             </button>
           )}
+          {undoNote("buildsOn")}
           {linkError && (
             <p className="error" role="alert" style={{ margin: 0 }}>
               {linkError}
@@ -303,13 +458,15 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
           )}
         </div>
 
-        {topic.neededFor.length > 0 && (
+        {(topic.neededFor.length > 0 || undoNote("neededFor")) && (
           <div className="field">
             <div className="fresh-row">
               <span className="field-label">Needed for</span>
               <span className="small">what builds on this</span>
             </div>
-            {chips(topic.neededFor, (other) => ({ topicId: other.id, buildsOnId: topic.id }))}
+            {topic.neededFor.length > 0 &&
+              chips(topic.neededFor, (other) => ({ topicId: other.id, buildsOnId: topic.id, term: other.term }))}
+            {undoNote("neededFor")}
           </div>
         )}
 
@@ -331,50 +488,55 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
           </div>
         )}
 
+      </div>
+
+      <footer className="sheet-foot">
         {error && (
           <p className="error" role="alert" style={{ margin: 0 }}>
             {error}
           </p>
         )}
-
         {confirmDelete ? (
-          <div
-            className="confirm-delete"
-            role="group"
-            aria-label="Confirm delete"
-            ref={(el) => el?.scrollIntoView({ block: "nearest" })}
-          >
+          <div className="foot-ask" role="group" aria-label="Confirm delete">
             <span>Delete "{topic.term}" and its history? This can't be undone.</span>
             <div className="row-end">
-              <button type="button" className="btn" onClick={() => setConfirmDelete(false)} disabled={remove.isPending}>
+              <button type="button" className="btn" autoFocus onClick={() => setConfirmDelete(false)} disabled={remove.isPending}>
                 Cancel
               </button>
               <button type="button" className="btn danger" onClick={() => remove.mutate()} disabled={remove.isPending}>
-                {remove.isPending ? "Deleting…" : "Delete"}
+                {remove.isPending ? "Deleting…" : "Delete card"}
+              </button>
+            </div>
+          </div>
+        ) : leaving ? (
+          <div className="foot-ask" role="group" aria-label="Unsaved explanation">
+            <span>You haven't saved your explanation.</span>
+            <div className="row-end">
+              <button type="button" className="btn" onClick={() => setLeaving(null)} disabled={update.isPending}>
+                Keep editing
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={update.isPending}
+                onClick={() => {
+                  discard();
+                  leaving.go();
+                }}
+              >
+                Discard
+              </button>
+              <button type="button" className="btn primary" autoFocus disabled={update.isPending} onClick={() => save(leaving.go)}>
+                {update.isPending ? "Saving…" : "Save"}
               </button>
             </div>
           </div>
         ) : (
-          <div className="sheet-actions">
-            <button type="button" className="link-btn delete-link" onClick={() => setConfirmDelete(true)}>
-              Delete card
-            </button>
-            <div className="row-end">
-              <button
-                type="button"
-                className="btn"
-                disabled={update.isPending || explanation === topic.explanation}
-                onClick={() => update.mutate({ explanation })}
-              >
-                {update.isPending ? "Saving…" : "Save explanation"}
-              </button>
-              <button type="button" className="btn primary" onClick={() => void copy()}>
-                {copied ? "Copied · paste it in Claude" : "Copy test prompt"}
-              </button>
-            </div>
-          </div>
+          <button type="button" className="btn primary wide" onClick={() => void copy()}>
+            {copied ? "Copied · paste it in Claude" : "Copy test prompt"}
+          </button>
         )}
-      </div>
+      </footer>
     </dialog>
   );
 }
