@@ -3,7 +3,8 @@
  * the Postgres adapter in @prepup/db and the in-memory adapter used in tests
  * both implement this interface.
  */
-import type { EventKind, EventSource, Importance, Score } from "@prepup/contracts";
+import type { EventKind, EventSource, Importance, Score, TopicRef } from "@prepup/contracts";
+import type { LinkPair } from "./links.js";
 
 export interface TopicRecord {
   id: string;
@@ -58,6 +59,19 @@ export interface ChangeSet {
   events: NewEvent[];
 }
 
+/** One "builds on" link: `topicId` builds on `buildsOnId`, both in `workspaceId`. */
+export interface TopicLink extends LinkPair {
+  workspaceId: string;
+  createdBy: string;
+  createdAt: Date;
+}
+
+/** One topic's neighbours, with the terms to show them by. */
+export interface TopicLinks {
+  buildsOn: TopicRef[];
+  neededFor: TopicRef[];
+}
+
 export interface PrepUpRepository {
   /** Returns the user's personal workspace id, creating it on first use. */
   ensurePersonalWorkspace(userId: string, now: Date): Promise<string>;
@@ -74,8 +88,26 @@ export interface PrepUpRepository {
   /** Applies the settings change and appends the events atomically. */
   applyChanges(changes: ChangeSet): Promise<void>;
 
-  /** Deletes the topic with its settings and history. Returns false if it isn't in this workspace. */
+  /** Deletes the topic with its settings, history and links. Returns false if it isn't in this workspace. */
   deleteTopic(workspaceId: string, topicId: string): Promise<boolean>;
+
+  /** Every topic in the workspace, without scores: cheap, for matching terms and naming topics. */
+  listTopicRecords(workspaceId: string): Promise<TopicRecord[]>;
+
+  /**
+   * Saves a link unless it already exists; returns whether it was new.
+   * `check` is the core's rule (no loops, no more than the cap): the adapter
+   * calls it with the workspace's current links and saves only if it doesn't
+   * throw, as one unit of work, so two links arriving together can't slip a
+   * loop past the check.
+   */
+  insertLinkIfAbsent(link: TopicLink, check: (existing: LinkPair[]) => void): Promise<boolean>;
+  /** Removes a link. Returns false if there was none. */
+  deleteLink(workspaceId: string, topicId: string, buildsOnId: string): Promise<boolean>;
+  /** One topic's links, both directions. */
+  listLinksForTopic(workspaceId: string, topicId: string): Promise<TopicLinks>;
+  /** Every link in the workspace, in one query. */
+  listLinks(workspaceId: string): Promise<LinkPair[]>;
 
   /** The user's saved testing style, or null if they never changed the default. */
   getTestingStyle(userId: string): Promise<{ text: string; updatedAt: Date } | null>;
@@ -83,7 +115,7 @@ export interface PrepUpRepository {
 
   /**
    * "Delete my data": removes the user's personal workspace with every topic in
-   * it, plus their settings, events and memberships anywhere else.
+   * it, plus their settings, events, links and memberships anywhere else.
    */
   deleteUserData(userId: string): Promise<void>;
 

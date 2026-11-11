@@ -8,8 +8,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   AddTopicInput,
   GetTopicInput,
+  LinkTopicsInput,
   ListTopicsInput,
   RecordReviewInput,
+  SearchTopicsInput,
   TOPIC_FILTERS,
   type TopicView,
 } from "@prepup/contracts";
@@ -38,25 +40,43 @@ export const TOOLS = {
   add_topic: {
     title: "Add a topic",
     description:
-      "Add a term or concept to the user's PrepUp deck. Idempotent: if it already exists (even spelled differently), the existing card is returned.",
+      "Add a term or concept to the user's PrepUp deck. Idempotent: if it already exists (even spelled differently), the existing card is returned. Also returns similar topics already in the deck (a plain text match), so you can propose what the new topic builds on. It links nothing itself.",
     readOnly: false,
   },
   list_topics: {
     title: "List topics",
     description:
-      "List the user's topics, highest priority first (important, weak, or about to fade). Use this to choose what to test.",
+      "List the user's topics, highest priority first (important, weak, or about to fade), each with the topics it builds on. With the prep filter, prerequisites come ahead of what builds on them. Use this to choose what to test.",
     readOnly: true,
   },
   get_topic: {
     title: "Read a topic",
     description:
-      "Read one topic in full, including the user's saved explanation and recent test feedback. During a test, call this only after the user has answered, so you don't prompt them with their own notes.",
+      "Read one topic in full, including the user's saved explanation, recent test feedback, what it builds on and what it is needed for. During a test, call this only after the user has answered, so you don't prompt them with their own notes.",
     readOnly: true,
   },
   record_review: {
     title: "Record a test result",
     description:
       "Save the result of testing the user on a topic: the score, and optionally the explanation you drafted for their card. Only call after the user has confirmed both. Resets the topic's 14-day fade clock. A score of 5 requires explained: true.",
+    readOnly: false,
+  },
+  search_topics: {
+    title: "Search topics",
+    description:
+      "Find topics by words or part of a term (a plain text match), best match first. Use it when the deck is too big to list, or to check a topic's score without reading the user's explanation.",
+    readOnly: true,
+  },
+  link_topics: {
+    title: "Link a topic to what it builds on",
+    description:
+      'Record that one topic builds on another: term builds on buildsOnTerm ("RAG" builds on "Embeddings"). Only call after the user has said yes to that link. Both topics must already be in the deck. A link that would make a loop is refused. Links never change a score or the fade clock. Safe to call twice.',
+    readOnly: false,
+  },
+  unlink_topics: {
+    title: "Remove a link",
+    description:
+      "Remove a \"builds on\" link between two topics: term no longer builds on buildsOnTerm. Only call after the user has confirmed. Both topics stay in the deck, with their scores and history.",
     readOnly: false,
   },
 } as const;
@@ -95,6 +115,7 @@ const brief = (t: TopicView) => ({
   fadingSoon: t.fadingSoon,
   lastTestedAt: t.lastTestedAt,
   hasExplanation: t.explanation.length > 0,
+  buildsOn: t.buildsOn.map((p) => p.term),
 });
 
 const WHO = { you: "the user", claude: "Claude, from an earlier test" } as const;
@@ -130,7 +151,7 @@ export async function testingStyleFor(service: PrepUpService, actor: Actor): Pro
  */
 export function createMcpServer(service: PrepUpService, actor: Actor, style: string = DEFAULT_TESTING_STYLE): McpServer {
   const server = new McpServer(
-    { name: "prepup", title: "PrepUp", version: "0.3.0" },
+    { name: "prepup", title: "PrepUp", version: "0.4.0" },
     { instructions: buildInstructions(style), capabilities: { tools: {}, prompts: {} } },
   );
 
@@ -157,10 +178,13 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
     },
     async (input) =>
       guard(async () => {
-        const { topic, created } = await service.addTopic(actor, input);
+        const { topic, created, similar } = await service.addTopic(actor, input);
+        const hint = similar.length
+          ? " Similar topics are listed below: if it builds on any of them (or on anything else in the deck), ask the user before linking."
+          : "";
         return toolResult(
-          created ? `Added "${topic.term}" to PrepUp.` : `"${topic.term}" was already in PrepUp; nothing changed.`,
-          brief(topic),
+          (created ? `Added "${topic.term}" to PrepUp.` : `"${topic.term}" was already in PrepUp; nothing changed.`) + hint,
+          { ...brief(topic), similarTopics: similar.map((s) => s.term) },
         );
       }),
   );
@@ -198,8 +222,61 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
           ...brief(topic),
           explanation: topic.explanation || null,
           explanationWrittenBy: topic.explanationBy ? WHO[topic.explanationBy] : null,
+          neededFor: topic.neededFor.map((t) => t.term),
           recentTests: lastTests,
         });
+      }),
+  );
+
+  server.registerTool(
+    "search_topics",
+    {
+      ...meta("search_topics"),
+      inputSchema: SearchTopicsInput,
+      annotations: { readOnlyHint: true },
+    },
+    async (input) =>
+      guard(async () => {
+        const topics = await service.searchTopics(actor, input);
+        return toolResult(`${topics.length} topic(s) match "${input.query}".`, topics.map(brief));
+      }),
+  );
+
+  server.registerTool(
+    "link_topics",
+    {
+      ...meta("link_topics"),
+      inputSchema: LinkTopicsInput,
+      annotations: { idempotentHint: true, destructiveHint: false },
+    },
+    async (input) =>
+      guard(async () => {
+        const { topic, created, buildsOn } = await service.linkTopicsByTerm(actor, input);
+        return toolResult(
+          created
+            ? `Linked: "${topic.term}" now builds on "${buildsOn.term}".`
+            : `"${topic.term}" already builds on "${buildsOn.term}"; nothing changed.`,
+          brief(topic),
+        );
+      }),
+  );
+
+  server.registerTool(
+    "unlink_topics",
+    {
+      ...meta("unlink_topics"),
+      inputSchema: LinkTopicsInput,
+      annotations: { idempotentHint: true, destructiveHint: true },
+    },
+    async (input) =>
+      guard(async () => {
+        const { topic, removed, buildsOn } = await service.unlinkTopicsByTerm(actor, input);
+        return toolResult(
+          removed
+            ? `Unlinked: "${topic.term}" no longer builds on "${buildsOn.term}".`
+            : `"${topic.term}" wasn't linked to "${buildsOn.term}"; nothing changed.`,
+          brief(topic),
+        );
       }),
   );
 
@@ -252,7 +329,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
           role: "user",
           content: {
             type: "text",
-            text: `Add these to PrepUp, one add_topic call each: ${terms}. Then tell me in one line which were new.`,
+            text: `Add these to PrepUp, one add_topic call each: ${terms}. Then tell me in one line which were new, and ask me before linking any of them to what they build on.`,
           },
         },
       ],

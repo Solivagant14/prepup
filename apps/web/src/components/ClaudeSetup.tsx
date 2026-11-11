@@ -196,7 +196,7 @@ function Tools({ info }: { info: ConnectorInfo }) {
     <section className="panel" aria-labelledby="tools-title">
       <h2 id="tools-title">3 · What Claude can do</h2>
       <p className="panel-lead">
-        The connector gives Claude these {info.tools.length} tools. It can't delete topics or your data; that only happens here.
+        The connector gives Claude these {info.tools.length} tools. It can link topics to what they build on, after you say yes. It can't delete topics or your data; that only happens here.
       </p>
       <ul className="tools">
         {info.tools.map((t) => (

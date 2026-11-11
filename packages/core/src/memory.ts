@@ -4,7 +4,16 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Importance, Score } from "@prepup/contracts";
-import type { ChangeSet, EventRecord, PrepUpRepository, SettingsPatch, TopicRecord, TopicState } from "./ports.js";
+import type { LinkPair } from "./links.js";
+import type {
+  ChangeSet,
+  EventRecord,
+  PrepUpRepository,
+  SettingsPatch,
+  TopicLink,
+  TopicRecord,
+  TopicState,
+} from "./ports.js";
 
 export class InMemoryRepository implements PrepUpRepository {
   private workspaces = new Map<string, string>(); // owner userId -> workspaceId
@@ -12,6 +21,7 @@ export class InMemoryRepository implements PrepUpRepository {
   private settings = new Map<string, { importance: Importance; explanation: string }>();
   private events: EventRecord[] = [];
   private styles = new Map<string, { text: string; updatedAt: Date }>();
+  private links: TopicLink[] = [];
 
   async ensurePersonalWorkspace(userId: string): Promise<string> {
     let id = this.workspaces.get(userId);
@@ -68,8 +78,50 @@ export class InMemoryRepository implements PrepUpRepository {
     this.topics = this.topics.filter((t) => !(t.id === topicId && t.workspaceId === workspaceId));
     if (this.topics.length === before) return false;
     this.events = this.events.filter((e) => e.topicId !== topicId);
+    this.links = this.links.filter((l) => l.topicId !== topicId && l.buildsOnId !== topicId);
     for (const key of this.settings.keys()) if (key.endsWith(`:${topicId}`)) this.settings.delete(key);
     return true;
+  }
+
+  async listTopicRecords(workspaceId: string) {
+    return this.topics.filter((t) => t.workspaceId === workspaceId);
+  }
+
+  async insertLinkIfAbsent(link: TopicLink, check: (existing: LinkPair[]) => void) {
+    if (link.topicId === link.buildsOnId) throw new Error("self-link");
+    const inWorkspace = (id: string) => this.topics.some((t) => t.id === id && t.workspaceId === link.workspaceId);
+    if (!inWorkspace(link.topicId) || !inWorkspace(link.buildsOnId)) throw new Error("link outside the workspace");
+    const existing = await this.listLinks(link.workspaceId);
+    if (existing.some((l) => l.topicId === link.topicId && l.buildsOnId === link.buildsOnId)) return false;
+    check(existing);
+    this.links.push({ ...link });
+    return true;
+  }
+
+  async deleteLink(workspaceId: string, topicId: string, buildsOnId: string) {
+    const before = this.links.length;
+    this.links = this.links.filter(
+      (l) => !(l.workspaceId === workspaceId && l.topicId === topicId && l.buildsOnId === buildsOnId),
+    );
+    return this.links.length < before;
+  }
+
+  async listLinksForTopic(workspaceId: string, topicId: string) {
+    const mine = this.links.filter((l) => l.workspaceId === workspaceId);
+    const ref = (id: string) => {
+      const t = this.topics.find((x) => x.id === id)!;
+      return { id: t.id, term: t.term };
+    };
+    return {
+      buildsOn: mine.filter((l) => l.topicId === topicId).map((l) => ref(l.buildsOnId)),
+      neededFor: mine.filter((l) => l.buildsOnId === topicId).map((l) => ref(l.topicId)),
+    };
+  }
+
+  async listLinks(workspaceId: string): Promise<LinkPair[]> {
+    return this.links
+      .filter((l) => l.workspaceId === workspaceId)
+      .map(({ topicId, buildsOnId }) => ({ topicId, buildsOnId }));
   }
 
   async getTestingStyle(userId: string) {
@@ -87,6 +139,7 @@ export class InMemoryRepository implements PrepUpRepository {
     const gone = new Set(this.topics.filter((t) => t.workspaceId === workspaceId).map((t) => t.id));
     this.topics = this.topics.filter((t) => !gone.has(t.id));
     this.events = this.events.filter((e) => e.userId !== userId && !gone.has(e.topicId));
+    this.links = this.links.filter((l) => l.createdBy !== userId && !gone.has(l.topicId) && !gone.has(l.buildsOnId));
     for (const key of this.settings.keys()) {
       const [owner, topicId] = key.split(":");
       if (owner === userId || gone.has(topicId!)) this.settings.delete(key);

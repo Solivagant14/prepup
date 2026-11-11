@@ -1,5 +1,5 @@
 /**
- * How a test runs has two layers.
+ * How Claude works with PrepUp has two layers.
  *
  * The fixed rules are PrepUp's: they protect what a score means, so no one
  * can turn them off. The testing style is the user's: who the tester is, how
@@ -22,6 +22,11 @@ export const FIXED_RULES: FixedRule[] = [
     id: "pick",
     rule: 'Pick topics with list_topics (filter "fading_week" or "prep") unless the user names topics.',
     why: "Tests go where they help most: what's weak or about to fade.",
+  },
+  {
+    id: "prerequisites-first",
+    rule: "If a topic is weak and something it builds on is weaker, test that prerequisite first. list_topics shows what each topic builds on; search_topics finds a prerequisite's score if it isn't in your list.",
+    why: "A topic is hard to explain while what it rests on is still shaky.",
   },
   {
     id: "one-at-a-time",
@@ -52,6 +57,11 @@ export const FIXED_RULES: FixedRule[] = [
     id: "record",
     rule: "Call record_review with the confirmed score, and the explanation only if they approved it. Never call it before they confirm.",
     why: "Nothing is saved without your yes.",
+  },
+  {
+    id: "link",
+    rule: 'When the user adds a topic, look at the similar topics add_topic returns, and at their deck, for what the new topic builds on. Propose each link in one line ("RAG builds on Embeddings. Link them?") and call link_topics only after they say yes.',
+    why: "Nothing is linked without your yes, and links never change a score.",
   },
 ];
 
@@ -103,6 +113,7 @@ export function buildInstructions(style: string): string {
     "Scores fade one step every 14 days unless the topic is tested again.",
     "",
     "Capturing: when the user mentions a term they want to learn, call add_topic. It is safe to call twice; duplicates merge.",
+    'Topics can build on other topics ("RAG builds on Embeddings"). Links map the deck; they never change a score or the fade clock.',
     "",
     "Testing has two layers: fixed rules that always apply, and the user's own testing style.",
     "Before the first test in a conversation, call whoami: it returns their current testing style, which may have changed since this conversation began.",

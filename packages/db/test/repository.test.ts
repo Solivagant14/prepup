@@ -189,6 +189,149 @@ describe("PostgresRepository", () => {
   });
 });
 
+describe("topic links", () => {
+  const ids = async (actor: Awaited<ReturnType<PrepUpService["resolveActor"]>>, ...terms: string[]) => {
+    const out: Record<string, string> = {};
+    for (const term of terms) out[term] = (await service.addTopic(actor, { term })).topic.id;
+    return out;
+  };
+
+  it("stores links and reads them back in both directions, alone and in the list", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const id = await ids(me, "RAG", "Embeddings", "Vector databases");
+    await service.linkTopics(me, id.RAG!, { buildsOnId: id.Embeddings! });
+    await service.linkTopics(me, id.RAG!, { buildsOnId: id["Vector databases"]! });
+
+    const rag = await service.getTopic(me, id.RAG!);
+    expect(rag.buildsOn.map((t) => t.term)).toEqual(["Embeddings", "Vector databases"]);
+    expect((await service.getTopic(me, id.Embeddings!)).neededFor).toEqual([{ id: id.RAG, term: "RAG" }]);
+    const listed = await service.listTopics(me);
+    expect(listed.find((t) => t.id === id.RAG)!.buildsOn).toEqual(rag.buildsOn);
+    expect(listed.find((t) => t.id === id.Embeddings)!.neededFor).toEqual([{ id: id.RAG, term: "RAG" }]);
+    expect(await db.select().from(schema.topicLinks)).toMatchObject([
+      { workspaceId: me.workspaceId, createdBy: me.userId },
+      { workspaceId: me.workspaceId, createdBy: me.userId },
+    ]);
+  });
+
+  it("keeps one row when the same link arrives several times at once", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const id = await ids(me, "RAG", "Embeddings");
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => service.linkTopics(me, id.RAG!, { buildsOnId: id.Embeddings! })),
+    );
+    expect(results.filter((r) => r.created)).toHaveLength(1);
+    expect(await db.select().from(schema.topicLinks)).toHaveLength(1);
+  });
+
+  it("lets only one of two opposite links through when they arrive together", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const id = await ids(me, "RAG", "Embeddings");
+    const results = await Promise.allSettled([
+      service.linkTopics(me, id.RAG!, { buildsOnId: id.Embeddings! }),
+      service.linkTopics(me, id.Embeddings!, { buildsOnId: id.RAG! }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(results.find((r) => r.status === "rejected")).toMatchObject({ reason: { code: "rule" } });
+    expect(await db.select().from(schema.topicLinks)).toHaveLength(1);
+  });
+
+  it("rejects loops and enforces the cap against the real rows", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const id = await ids(me, "Agents", "RAG", "Embeddings");
+    await service.linkTopics(me, id.Agents!, { buildsOnId: id.RAG! });
+    await service.linkTopics(me, id.RAG!, { buildsOnId: id.Embeddings! });
+    await expect(service.linkTopics(me, id.Embeddings!, { buildsOnId: id.Agents! })).rejects.toMatchObject({
+      code: "rule",
+      message: expect.stringContaining("would make a loop"),
+    });
+    expect(await db.select().from(schema.topicLinks)).toHaveLength(2);
+
+    const many = await ids(me, ...Array.from({ length: 21 }, (_, i) => `Basics ${i}`));
+    for (let i = 0; i < 20; i++) await service.linkTopics(me, id.Embeddings!, { buildsOnId: many[`Basics ${i}`]! });
+    await expect(service.linkTopics(me, id.Embeddings!, { buildsOnId: many["Basics 20"]! })).rejects.toMatchObject({
+      code: "rule",
+      message: expect.stringContaining("already builds on 20 topics"),
+    });
+  });
+
+  it("refuses self-links, duplicates and cross-workspace links in the database too", async () => {
+    const alice = await service.resolveActor(randomUUID());
+    const bob = await service.resolveActor(randomUUID());
+    const hers = await ids(alice, "RAG", "Embeddings");
+    const his = await ids(bob, "RAG");
+    const row = { workspaceId: alice.workspaceId, createdBy: alice.userId, createdAt: now };
+
+    await expect(db.insert(schema.topicLinks).values({ ...row, topicId: hers.RAG!, buildsOnId: hers.RAG! })).rejects.toThrow();
+    await db.insert(schema.topicLinks).values({ ...row, topicId: hers.RAG!, buildsOnId: hers.Embeddings! });
+    await expect(
+      db.insert(schema.topicLinks).values({ ...row, topicId: hers.RAG!, buildsOnId: hers.Embeddings! }),
+    ).rejects.toThrow();
+    await expect(
+      db.insert(schema.topicLinks).values({ ...row, topicId: hers.RAG!, buildsOnId: randomUUID() }),
+    ).rejects.toThrow();
+
+    // The adapter itself refuses a link whose other end is in someone else's workspace, whatever the caller checked.
+    const repo = new PostgresRepository(db);
+    await expect(
+      repo.insertLinkIfAbsent({ ...row, topicId: hers.Embeddings!, buildsOnId: his.RAG! }, () => {}),
+    ).rejects.toThrow(/same workspace/);
+    await expect(service.linkTopics(bob, his.RAG!, { buildsOnId: hers.Embeddings! })).rejects.toMatchObject({
+      code: "not_found",
+    });
+    expect(await repo.deleteLink(bob.workspaceId, hers.RAG!, hers.Embeddings!)).toBe(false);
+    expect(await repo.listLinks(bob.workspaceId)).toEqual([]);
+    expect(await repo.listLinksForTopic(bob.workspaceId, hers.RAG!)).toEqual({ buildsOn: [], neededFor: [] });
+    expect(await db.select().from(schema.topicLinks)).toHaveLength(1);
+  });
+
+  it("cascades a topic delete to its links, in both directions", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const id = await ids(me, "Agents", "RAG", "Embeddings");
+    await service.linkTopics(me, id.Agents!, { buildsOnId: id.RAG! });
+    await service.linkTopics(me, id.RAG!, { buildsOnId: id.Embeddings! });
+    await service.linkTopics(me, id.Agents!, { buildsOnId: id.Embeddings! });
+
+    await service.deleteTopic(me, id.RAG!);
+    expect(await db.select().from(schema.topicLinks)).toMatchObject([{ topicId: id.Agents, buildsOnId: id.Embeddings }]);
+    expect((await service.getTopic(me, id.Agents!)).buildsOn).toEqual([{ id: id.Embeddings, term: "Embeddings" }]);
+  });
+
+  it("deletes a user's links with their data and nobody else's", async () => {
+    const alice = await service.resolveActor(randomUUID());
+    const bob = await service.resolveActor(randomUUID());
+    const hers = await ids(alice, "RAG", "Embeddings");
+    const his = await ids(bob, "RAG", "Embeddings");
+    await service.linkTopics(alice, hers.RAG!, { buildsOnId: hers.Embeddings! });
+    await service.linkTopics(bob, his.RAG!, { buildsOnId: his.Embeddings! });
+
+    await service.deleteAccount(alice);
+    expect(await db.select().from(schema.topicLinks)).toMatchObject([{ workspaceId: bob.workspaceId, createdBy: bob.userId }]);
+  });
+
+  it("sorts prerequisites first in Prep now, from the stored links", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const id = await ids(me, "Agents", "RAG", "Embeddings");
+    await service.updateTopic(me, id.Agents!, { importance: "high" }, "web");
+    await service.linkTopics(me, id.Agents!, { buildsOnId: id.RAG! });
+    await service.linkTopics(me, id.RAG!, { buildsOnId: id.Embeddings! });
+    expect((await service.listTopics(me, { filter: "prep" })).map((t) => t.term)).toEqual(["Embeddings", "RAG", "Agents"]);
+    expect((await service.addTopic(me, { term: "Agentic RAG" })).similar.map((t) => t.term)).toEqual(["RAG"]);
+  });
+
+  it("still shows the deck if the code runs before the topic_links migration", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    const other = await service.addTopic(me, { term: "Embeddings" });
+    await db.execute("DROP TABLE topic_links");
+
+    expect((await service.listTopics(me)).map((t) => t.buildsOn)).toEqual([[], []]);
+    expect(await service.getTopic(me, topic.id)).toMatchObject({ term: "RAG", buildsOn: [], neededFor: [] });
+    // Linking can't work without the table: it fails loudly instead of pretending.
+    await expect(service.linkTopics(me, topic.id, { buildsOnId: other.topic.id })).rejects.toThrow();
+  });
+});
+
 describe("user settings", () => {
   it("saves and replaces a testing style per user", async () => {
     const alice = await service.resolveActor(randomUUID());

@@ -83,6 +83,35 @@ export const topicSettings = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.topicId] })],
 );
 
+/**
+ * One row per "builds on": `topic_id` builds on `builds_on_id`. The primary
+ * key makes a pair unique and the check forbids self-links; loops are
+ * rejected by the core, which sees the whole graph. Deleting either topic
+ * removes the link.
+ */
+export const topicLinks = pgTable(
+  "topic_links",
+  {
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    topicId: uuid("topic_id")
+      .notNull()
+      .references(() => topics.id, { onDelete: "cascade" }),
+    buildsOnId: uuid("builds_on_id")
+      .notNull()
+      .references(() => topics.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.topicId, t.buildsOnId] }),
+    index("topic_links_builds_on_idx").on(t.buildsOnId),
+    index("topic_links_workspace_idx").on(t.workspaceId),
+    check("topic_links_no_self_link", sql`${t.topicId} <> ${t.buildsOnId}`),
+  ],
+);
+
 /** Personal settings that aren't about one topic. Today: how the user wants to be tested. */
 export const userSettings = pgTable(
   "user_settings",

@@ -133,6 +133,23 @@ textarea.explanation { width: 100%; padding: 12px 14px; border: 1px solid var(--
 .history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .history li { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
 .history time { flex: 0 0 84px; color: var(--muted); }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: stretch; max-width: 100%; min-width: 0; border-radius: 999px; background: #eef0ff; color: #312e81; }
+.chip button { border: none; background: transparent; color: inherit; min-height: 36px; }
+.chip-open { min-width: 0; padding: 0 4px 0 14px; font-size: 13.5px; font-weight: 500; text-align: left; overflow-wrap: anywhere; border-radius: 999px 0 0 999px; }
+.chip-open:hover { text-decoration: underline; }
+.chip-remove { flex: none; width: 36px; font-size: 16px; line-height: 1; border-radius: 0 999px 999px 0; opacity: 0.7; }
+.chip-remove:hover:not(:disabled) { opacity: 1; color: var(--rose); }
+.chip-remove:disabled { opacity: 0.35; cursor: default; }
+.add-link { align-self: flex-start; height: 36px; padding: 0 12px; font-size: 13px; color: var(--ink-2); }
+.link-search { display: flex; flex-direction: column; gap: 8px; }
+.link-search-row { display: flex; gap: 8px; }
+.link-search-row input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 16px; }
+.link-options { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.link-options li + li { border-top: 1px solid var(--line); }
+.link-options button { width: 100%; min-height: 40px; padding: 8px 12px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 12px; border: none; background: var(--surface); font-size: 14px; text-align: left; overflow-wrap: anywhere; }
+.link-options button:hover:not(:disabled) { background: #eef0ff; }
+.link-options button:disabled { color: var(--muted); cursor: default; }
 .source-link { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 
 .auth { min-height: 100dvh; display: grid; place-items: center; padding: 16px; }

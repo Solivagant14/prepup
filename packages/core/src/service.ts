@@ -6,20 +6,28 @@
 import {
   AddTopicInput,
   DEFAULT_MAX_TOPICS,
+  LinkTopicInput,
+  LinkTopicsInput,
   ListTopicsInput,
+  MAX_PREREQUISITES,
   RecordReviewInput,
+  SearchTopicsInput,
   SetScoreInput,
+  SIMILAR_TOPICS_LIMIT,
   UpdateSettingsInput,
   UpdateTopicInput,
   type EventSource,
   type ReviewEventView,
   type TopicFilter,
+  type TopicRef,
   type TopicView,
   type UserSettingsView,
 } from "@prepup/contracts";
 import type { z } from "zod";
 import { DomainError } from "./errors.js";
-import type { NewEvent, PrepUpRepository, TopicState } from "./ports.js";
+import { loopPath, prerequisitesFirst, type LinkPair } from "./links.js";
+import { bestMatches } from "./matching.js";
+import type { NewEvent, PrepUpRepository, TopicLinks, TopicState } from "./ports.js";
 import { computeScore, levelName, normalizeTerm, priority } from "./scoring.js";
 import { DEFAULT_TESTING_STYLE, presetOf } from "./testing.js";
 
@@ -52,6 +60,12 @@ const FILTERS: Record<TopicFilter, (t: TopicView) => boolean> = {
   confident: (t) => t.score >= 4,
 };
 
+/** The shortest overlap that makes two terms "similar": below this, nearly everything matches. */
+const SIMILAR_MIN_LENGTH = 3;
+
+const byTerm = (a: TopicRef, b: TopicRef) => a.term.localeCompare(b.term);
+const NO_LINKS: TopicLinks = { buildsOn: [], neededFor: [] };
+
 export class PrepUpService {
   constructor(
     private readonly repo: PrepUpRepository,
@@ -64,8 +78,12 @@ export class PrepUpService {
     return { userId, workspaceId };
   }
 
-  /** Idempotent: capturing a term that already exists returns the existing card. */
-  async addTopic(actor: Actor, input: unknown) {
+  /**
+   * Idempotent: capturing a term that already exists returns the existing card.
+   * `similar` lists existing topics whose terms look alike, so Claude can
+   * propose "builds on" links from them. Nothing is linked here.
+   */
+  async addTopic(actor: Actor, input: unknown): Promise<{ topic: TopicView; created: boolean; similar: TopicRef[] }> {
     const { term, sourceUrl } = parse(AddTopicInput, input);
     const now = this.clock();
     const normalizedTerm = normalizeTerm(term);
@@ -82,23 +100,32 @@ export class PrepUpService {
       createdBy: actor.userId,
       createdAt: now,
     });
-    return { topic: await this.view(actor, record.id), created };
+    const others = (await this.repo.listTopicRecords(actor.workspaceId)).filter((t) => t.id !== record.id);
+    const similar = bestMatches(record.term, others, SIMILAR_TOPICS_LIMIT, SIMILAR_MIN_LENGTH);
+    return {
+      topic: await this.view(actor, record.id),
+      created,
+      similar: similar.map((t) => ({ id: t.id, term: t.term })),
+    };
   }
 
+  /**
+   * Highest priority first. With the "prep" filter, a topic's prerequisites
+   * come ahead of it, so the list reads as a path: learn what it builds on,
+   * then the topic. Other filters keep plain priority order.
+   */
   async listTopics(actor: Actor, input: unknown = {}): Promise<TopicView[]> {
     const { filter, limit } = parse(ListTopicsInput, input);
-    const now = this.clock();
-    const states = await this.repo.listTopicStates(actor.workspaceId, actor.userId);
-    return states
-      .map((s) => toView(s, now))
-      .filter(FILTERS[filter])
-      .sort(
-        (a, b) =>
-          b.priority - a.priority ||
-          (a.daysUntilDrop ?? Infinity) - (b.daysUntilDrop ?? Infinity) ||
-          a.term.localeCompare(b.term),
-      )
-      .slice(0, limit);
+    const { views, links } = await this.allViews(actor);
+    const shown = views.filter(FILTERS[filter]);
+    return (filter === "prep" ? prerequisitesFirst(shown, links) : shown).slice(0, limit);
+  }
+
+  /** Finds topics by text, for decks too big to list. Best match first. */
+  async searchTopics(actor: Actor, input: unknown): Promise<TopicView[]> {
+    const { query, limit } = parse(SearchTopicsInput, input);
+    const { views } = await this.allViews(actor);
+    return bestMatches(query, views, limit, 1);
   }
 
   async getTopic(actor: Actor, topicId: string): Promise<TopicView> {
@@ -106,9 +133,13 @@ export class PrepUpService {
   }
 
   async findByTerm(actor: Actor, term: string): Promise<TopicView> {
+    return this.view(actor, (await this.recordByTerm(actor, term)).id);
+  }
+
+  private async recordByTerm(actor: Actor, term: string) {
     const record = await this.repo.findTopicByNormalizedTerm(actor.workspaceId, normalizeTerm(term));
     if (!record) throw new DomainError("not_found", `No topic called "${term}" in PrepUp`);
-    return this.view(actor, record.id);
+    return record;
   }
 
   /**
@@ -162,7 +193,65 @@ export class PrepUpService {
     return this.view(actor, topicId);
   }
 
-  /** Permanently removes a topic and its history from the workspace. */
+  /**
+   * Records that one topic builds on another. Linking twice changes nothing.
+   * Links are a map of the deck and nothing more: they never change a score
+   * or the fade clock. Both topics must be in the actor's workspace.
+   */
+  async linkTopics(actor: Actor, topicId: string, input: unknown): Promise<{ topic: TopicView; created: boolean }> {
+    const { buildsOnId } = parse(LinkTopicInput, input);
+    const [topic, prerequisite] = await Promise.all([this.state(actor, topicId), this.state(actor, buildsOnId)]);
+    if (topicId === buildsOnId) {
+      throw new DomainError("rule", `"${topic.topic.term}" can't build on itself.`);
+    }
+    const created = await this.repo.insertLinkIfAbsent(
+      { workspaceId: actor.workspaceId, topicId, buildsOnId, createdBy: actor.userId, createdAt: this.clock() },
+      (existing) => this.checkLink(existing, topic.topic.term, prerequisite.topic.term, topicId, buildsOnId),
+    );
+    return { topic: await this.view(actor, topicId), created };
+  }
+
+  /** Removes a "builds on" link. Removing one that isn't there changes nothing. */
+  async unlinkTopics(actor: Actor, topicId: string, buildsOnId: string): Promise<{ topic: TopicView; removed: boolean }> {
+    await Promise.all([this.state(actor, topicId), this.state(actor, buildsOnId)]);
+    const removed = await this.repo.deleteLink(actor.workspaceId, topicId, buildsOnId);
+    return { topic: await this.view(actor, topicId), removed };
+  }
+
+  /** The same two calls by term, as Claude makes them. */
+  async linkTopicsByTerm(actor: Actor, input: unknown) {
+    const { term, buildsOnTerm } = parse(LinkTopicsInput, input);
+    const [topic, prerequisite] = [await this.recordByTerm(actor, term), await this.recordByTerm(actor, buildsOnTerm)];
+    const result = await this.linkTopics(actor, topic.id, { buildsOnId: prerequisite.id });
+    return { ...result, buildsOn: { id: prerequisite.id, term: prerequisite.term } };
+  }
+
+  async unlinkTopicsByTerm(actor: Actor, input: unknown) {
+    const { term, buildsOnTerm } = parse(LinkTopicsInput, input);
+    const [topic, prerequisite] = [await this.recordByTerm(actor, term), await this.recordByTerm(actor, buildsOnTerm)];
+    const result = await this.unlinkTopics(actor, topic.id, prerequisite.id);
+    return { ...result, buildsOn: { id: prerequisite.id, term: prerequisite.term } };
+  }
+
+  /** The rules a new link must pass, given every link the workspace already has. */
+  private checkLink(existing: LinkPair[], term: string, buildsOnTerm: string, topicId: string, buildsOnId: string) {
+    if (existing.filter((l) => l.topicId === topicId).length >= MAX_PREREQUISITES) {
+      throw new DomainError(
+        "rule",
+        `"${term}" already builds on ${MAX_PREREQUISITES} topics, which is the most a topic can have. Remove one to add another.`,
+      );
+    }
+    const loop = loopPath(existing, topicId, buildsOnId);
+    if (loop) {
+      const how = loop.length > 2 ? ` (through ${loop.length - 2 === 1 ? "another topic" : `${loop.length - 2} other topics`})` : "";
+      throw new DomainError(
+        "rule",
+        `"${term}" can't build on "${buildsOnTerm}": "${buildsOnTerm}" already builds on "${term}"${how}, so this would make a loop.`,
+      );
+    }
+  }
+
+  /** Permanently removes a topic, its history and its links from the workspace. */
   async deleteTopic(actor: Actor, topicId: string): Promise<{ term: string }> {
     const topic = await this.view(actor, topicId);
     const deleted = await this.repo.deleteTopic(actor.workspaceId, topicId);
@@ -221,14 +310,48 @@ export class PrepUpService {
     };
   }
 
-  private async view(actor: Actor, topicId: string): Promise<TopicView> {
+  private async state(actor: Actor, topicId: string): Promise<TopicState> {
     const state = await this.repo.getTopicState(actor.workspaceId, actor.userId, topicId);
     if (!state) throw new DomainError("not_found", "Topic not found");
-    return toView(state, this.clock());
+    return state;
+  }
+
+  private async view(actor: Actor, topicId: string): Promise<TopicView> {
+    const [state, links] = await Promise.all([
+      this.state(actor, topicId),
+      this.repo.listLinksForTopic(actor.workspaceId, topicId),
+    ]);
+    return toView(state, this.clock(), links);
+  }
+
+  /** Every topic in priority order, with its links filled in from one links query. */
+  private async allViews(actor: Actor): Promise<{ views: TopicView[]; links: LinkPair[] }> {
+    const now = this.clock();
+    const [states, links] = await Promise.all([
+      this.repo.listTopicStates(actor.workspaceId, actor.userId),
+      this.repo.listLinks(actor.workspaceId),
+    ]);
+    const term = new Map(states.map((s) => [s.topic.id, s.topic.term]));
+    const neighbours = new Map<string, TopicLinks>(states.map((s) => [s.topic.id, { buildsOn: [], neededFor: [] }]));
+    for (const l of links) {
+      const [topic, prerequisite] = [term.get(l.topicId), term.get(l.buildsOnId)];
+      if (topic === undefined || prerequisite === undefined) continue;
+      neighbours.get(l.topicId)!.buildsOn.push({ id: l.buildsOnId, term: prerequisite });
+      neighbours.get(l.buildsOnId)!.neededFor.push({ id: l.topicId, term: topic });
+    }
+    const views = states
+      .map((s) => toView(s, now, neighbours.get(s.topic.id)))
+      .sort(
+        (a, b) =>
+          b.priority - a.priority ||
+          (a.daysUntilDrop ?? Infinity) - (b.daysUntilDrop ?? Infinity) ||
+          a.term.localeCompare(b.term),
+      );
+    return { views, links };
   }
 }
 
-export function toView(s: TopicState, now: Date): TopicView {
+export function toView(s: TopicState, now: Date, links: TopicLinks = NO_LINKS): TopicView {
   const state = computeScore({
     lastScore: s.lastScore,
     lastTestAt: s.lastTestAt,
@@ -251,5 +374,7 @@ export function toView(s: TopicState, now: Date): TopicView {
     fadingSoon: state.fadingSoon,
     fadingThisWeek: state.fadingThisWeek,
     priority: priority(s.importance, state),
+    buildsOn: [...links.buildsOn].sort(byTerm),
+    neededFor: [...links.neededFor].sort(byTerm),
   };
 }

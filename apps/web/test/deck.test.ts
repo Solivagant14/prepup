@@ -1,6 +1,18 @@
 import type { TopicView } from "@prepup/contracts";
 import { describe, expect, it } from "vitest";
-import { cardLook, eventLabel, explanationNote, freshnessText, matches, mix, prefersLightText, RAMP, summarize } from "../src/lib/deck.js";
+import {
+  cardLook,
+  eventLabel,
+  explanationNote,
+  freshnessText,
+  matches,
+  mix,
+  prefersLightText,
+  prerequisiteOptions,
+  RAMP,
+  shownIn,
+  summarize,
+} from "../src/lib/deck.js";
 
 const topic = (over: Partial<TopicView>): TopicView => ({
   id: "t",
@@ -18,6 +30,8 @@ const topic = (over: Partial<TopicView>): TopicView => ({
   fadingSoon: false,
   fadingThisWeek: false,
   priority: 0,
+  buildsOn: [],
+  neededFor: [],
   ...over,
 });
 
@@ -88,5 +102,44 @@ describe("explanation authorship", () => {
     expect(eventLabel({ kind: "explanation", source: "mcp" })).toBe("Explanation drafted by Claude");
     expect(eventLabel({ kind: "explanation", source: "web" })).toBe("Explanation edited");
     expect(eventLabel({ kind: "claude_test", source: "mcp" })).toBe("Claude test");
+  });
+});
+
+describe("links in the deck", () => {
+  const ref = (t: TopicView) => ({ id: t.id, term: t.term });
+  // Server order (priority): Agents, RAG, Embeddings, Evals. Agents builds on RAG builds on Embeddings.
+  const embeddings = topic({ id: "e", term: "Embeddings" });
+  const rag = topic({ id: "r", term: "RAG", buildsOn: [ref(embeddings)] });
+  const agents = topic({ id: "a", term: "Agents", buildsOn: [ref(rag)] });
+  const evals = topic({ id: "v", term: "Evals", score: 4 });
+  const deck = [agents, rag, embeddings, evals];
+
+  it("puts prerequisites first in Prep now and nowhere else", () => {
+    expect(shownIn("prep", deck).map((t) => t.term)).toEqual(["Embeddings", "RAG", "Agents"]);
+    expect(shownIn("all", deck).map((t) => t.term)).toEqual(["Agents", "RAG", "Embeddings", "Evals"]);
+    expect(shownIn("confident", deck).map((t) => t.term)).toEqual(["Evals"]);
+  });
+
+  it("offers other topics as prerequisites, blocking the ones that would make a loop", () => {
+    // RAG already builds on Embeddings (left out), and Agents builds on RAG (blocked).
+    expect(prerequisiteOptions(rag, deck, "").options).toEqual([
+      { id: "v", term: "Evals", blocked: null },
+      { id: "a", term: "Agents", blocked: "builds on RAG" },
+    ]);
+    // Embeddings sits under both, so neither can become its prerequisite.
+    expect(prerequisiteOptions(embeddings, deck, "").options.map((o) => [o.term, o.blocked !== null])).toEqual([
+      ["Evals", false],
+      ["Agents", true],
+      ["RAG", true],
+    ]);
+    expect(prerequisiteOptions(agents, deck, "EMB").options).toEqual([{ id: "e", term: "Embeddings", blocked: null }]);
+    expect(prerequisiteOptions(agents, deck, "zzz")).toEqual({ options: [], more: 0 });
+  });
+
+  it("shows a few options and counts the rest", () => {
+    const many = Array.from({ length: 10 }, (_, i) => topic({ id: `t${i}`, term: `Topic ${i}` }));
+    const found = prerequisiteOptions(agents, [...deck, ...many], "topic");
+    expect(found.options).toHaveLength(6);
+    expect(found.more).toBe(4);
   });
 });
