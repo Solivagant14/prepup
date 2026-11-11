@@ -1,6 +1,7 @@
 import type { TopicView } from "@prepup/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  cardFlags,
   cardLook,
   eventLabel,
   explanationNote,
@@ -11,7 +12,9 @@ import {
   prerequisiteOptions,
   RAMP,
   shownIn,
+  startSteps,
   summarize,
+  TABS,
 } from "../src/lib/deck.js";
 
 const topic = (over: Partial<TopicView>): TopicView => ({
@@ -141,5 +144,49 @@ describe("links in the deck", () => {
     const found = prerequisiteOptions(agents, [...deck, ...many], "topic");
     expect(found.options).toHaveLength(6);
     expect(found.more).toBe(4);
+  });
+});
+
+describe("first visit", () => {
+  it("starts with nothing done on an empty deck", () => {
+    expect(startSteps([])).toEqual([
+      { id: "add", done: false },
+      { id: "connect", done: false },
+      { id: "test", done: false },
+    ]);
+  });
+
+  it("ticks the first step once a term is in the deck", () => {
+    expect(startSteps([topic({})])!.map((s) => s.done)).toEqual([true, false, false]);
+  });
+
+  it("goes away once Claude has tested anything, however long ago", () => {
+    expect(startSteps([topic({}), topic({ id: "u", lastTestedAt: "2026-01-01T00:00:00Z" })])).toBeNull();
+  });
+
+  it("a manual score doesn't count as a test", () => {
+    expect(startSteps([topic({ score: 4, level: "Confident" })])).not.toBeNull();
+  });
+});
+
+describe("what a card says", () => {
+  it("says nothing about the default importance or a card that isn't about to fade", () => {
+    expect(cardFlags(topic({}))).toEqual({ importance: null, fade: null });
+  });
+
+  it("flags high and low importance", () => {
+    expect(cardFlags(topic({ importance: "high" })).importance).toBe("High importance");
+    expect(cardFlags(topic({ importance: "low" })).importance).toBe("Low importance");
+  });
+
+  it("flags a card in its last days before a drop", () => {
+    expect(cardFlags(topic({ score: 3, fadingSoon: true, daysUntilDrop: 2 })).fade).toBe("fades in 2d");
+    expect(cardFlags(topic({ score: 3, fadingSoon: false, daysUntilDrop: 9 })).fade).toBeNull();
+  });
+});
+
+describe("filters", () => {
+  it("has a short label only where the full one is long", () => {
+    expect(TABS.filter((t) => t.short).map((t) => [t.label, t.short])).toEqual([["Fading this week", "Fading"]]);
   });
 });
