@@ -243,6 +243,23 @@ describe("limits and account deletion", () => {
   });
 });
 
+describe("host usage", () => {
+  it("counts people and topics across every deck, and drops them when someone deletes their data", async () => {
+    const { service } = setup();
+    expect(await service.hostUsage()).toEqual({ people: 0, topics: 0, databaseBytes: null });
+
+    const alice = await service.resolveActor("alice");
+    const bob = await service.resolveActor("bob");
+    await service.addTopic(alice, { term: "RAG" });
+    await service.addTopic(alice, { term: "Embeddings" });
+    await service.addTopic(bob, { term: "RAG" });
+    expect(await service.hostUsage()).toEqual({ people: 2, topics: 3, databaseBytes: null });
+
+    await service.deleteAccount(alice);
+    expect(await service.hostUsage()).toEqual({ people: 1, topics: 1, databaseBytes: null });
+  });
+});
+
 describe("testing style", () => {
   it("starts on the default preset and keeps each user's own wording", async () => {
     const { service, advance } = setup();

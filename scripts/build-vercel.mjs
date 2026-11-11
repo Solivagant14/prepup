@@ -55,7 +55,7 @@ writeFileSync(
 
 // 3. Routing: API paths go to the function (with the original path kept),
 //    real files are served as-is, and everything else is the web app.
-const apiPaths = "api/.*|mcp|health|app-config|oauth/consent|\\.well-known/.*";
+const apiPaths = "api/.*|mcp|health|app-config|host-status|oauth/consent|\\.well-known/.*";
 writeFileSync(
   join(out, "config.json"),
   JSON.stringify(

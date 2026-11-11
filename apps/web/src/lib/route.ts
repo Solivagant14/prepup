@@ -1,7 +1,9 @@
-/** Two screens don't need a router: the address after "#" picks which one shows. */
+/** A few screens don't need a router: the address after "#" picks which one shows. */
 import { useEffect, useState } from "react";
 
 export const CLAUDE_SETUP = "#/claude";
+/** Public: it shows before sign-in too. */
+export const COSTS = "#/costs";
 
 export function useHash(): string {
   const [hash, setHash] = useState(() => window.location.hash);

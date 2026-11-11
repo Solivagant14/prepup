@@ -4,7 +4,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { OAuthProvider } from "@prepup/contracts";
+import { DEFAULT_MAX_TOPICS, type HostStatusView, type HostUsage, type OAuthProvider } from "@prepup/contracts";
 import { DomainError, FIXED_RULES, STYLE_PRESETS, type Actor, type PrepUpService } from "@prepup/core";
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -25,7 +25,21 @@ export interface AppOptions {
   oauthProviders?: OAuthProvider[];
   /** Per-user request limits. Left out, nothing is limited (unit tests). */
   rateLimit?: RateLimitOptions;
+  /** What the public costs page says about this host. Left out, it reads as a free copy with no support link. */
+  host?: HostOptions;
 }
+
+export interface HostOptions {
+  monthlyCostUsd?: number;
+  supportUrl?: string;
+  sourceUrl?: string;
+  databaseLimitMb?: number;
+  maxTopics?: number;
+}
+
+const DEFAULT_SOURCE_URL = "https://github.com/Solivagant14/prepup";
+/** How long the usage totals are reused. The page is public, so it mustn't cost a database query per visit. */
+const USAGE_TTL_MS = 5 * 60_000;
 
 type Env = { Variables: { actor: Actor } };
 
@@ -51,8 +65,44 @@ export function createApp(opts: AppOptions) {
       supabaseUrl: opts.supabaseUrl ?? null,
       supabasePublishableKey: opts.supabasePublishableKey ?? null,
       providers: opts.oauthProviders ?? [],
+      supportUrl: opts.host?.supportUrl ?? null,
+      sourceUrl: opts.host?.sourceUrl ?? DEFAULT_SOURCE_URL,
     }),
   );
+
+  // The public costs page: what this host pays, how full it is, and each person's
+  // limits. Totals only. Anyone can call it, so the totals are kept for a few
+  // minutes here and by the CDN in front.
+  let usage: { at: number; value: Promise<HostUsage> } | null = null;
+  const currentUsage = () => {
+    const now = Date.now();
+    if (!usage || now - usage.at > USAGE_TTL_MS) {
+      const value = opts.service.hostUsage();
+      const entry = { at: now, value };
+      // A failed read isn't kept, so the next visit tries again.
+      value.catch(() => {
+        if (usage === entry) usage = null;
+      });
+      usage = entry;
+    }
+    return usage.value;
+  };
+  app.get("/host-status", async (c) => {
+    const status: HostStatusView = {
+      monthlyCostUsd: opts.host?.monthlyCostUsd ?? 0,
+      supportUrl: opts.host?.supportUrl ?? null,
+      sourceUrl: opts.host?.sourceUrl ?? DEFAULT_SOURCE_URL,
+      usage: await currentUsage(),
+      databaseLimitBytes: (opts.host?.databaseLimitMb ?? 500) * 1024 * 1024,
+      limits: {
+        topicsPerPerson: opts.host?.maxTopics ?? DEFAULT_MAX_TOPICS,
+        requestsPerMinute: opts.rateLimit?.perMinute ?? null,
+        requestsPerDay: opts.rateLimit?.perDay ?? null,
+      },
+    };
+    c.header("Cache-Control", "public, max-age=60, s-maxage=300");
+    return c.json(status);
+  });
 
   // OAuth protected-resource metadata (RFC 9728): tells Claude which
   // authorization server issues tokens for this API.

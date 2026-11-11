@@ -1,10 +1,41 @@
 # PrepUp
 
-A tracker for the things you're trying to learn: interview topics, exam material, the vocabulary of a new field. Capture a term the moment you hear it, let Claude test you on it, and watch your deck darken as you master it.
+A tracker for the things you're trying to learn: interview topics, exam material, the vocabulary of a new field. Add a term the moment you hear it, let Claude test you on it, and watch your deck darken as it sticks.
 
-PrepUp has **no AI of its own**. All testing runs in your own Claude app through an MCP connector (MCP is the open protocol that lets an AI assistant use outside tools); PrepUp is the system of record. You choose how you're tested: as a technical interviewer, a patient tutor, a quick drill, or in your own words.
+**Try it: [prepup-amber.vercel.app](https://prepup-amber.vercel.app)**. Free, sign in with Google.
 
-Open source under the [MIT license](LICENSE). To run your own copy, see [docs/self-hosting.md](docs/self-hosting.md).
+![The deck: one card per topic, darker as you know it better](docs/images/deck.png)
+
+## How it works
+
+1. **Capture.** Type a term into the box, or tell Claude "add RAG to PrepUp". It becomes a card with a score from 1 to 5.
+2. **Get tested.** Ask Claude "test me on my PrepUp topics". It picks what's weak or fading, asks one topic at a time, and suggests a score. Nothing is saved until you say yes.
+3. **Watch it darken.** Cards go from pale to deep indigo as your score rises. A score fades one step every 14 days unless you're tested again, so the deck always shows what you know *now*.
+4. **See how topics connect.** Claude proposes what a new topic builds on, and the graph view draws your deck as a learning path.
+
+![The graph view: topics linked to what they build on](docs/images/graph.png)
+
+PrepUp has **no AI of its own**. All testing runs in your own Claude app through an MCP connector (MCP is the open protocol that lets an AI assistant use outside tools), on your own Claude plan. PrepUp only keeps the record. You choose how you're tested: as a technical interviewer, a patient tutor, a quick drill, or in your own words.
+
+## Get started in 5 minutes
+
+You need a Google account and a Claude plan that allows custom connectors.
+
+1. Open [prepup-amber.vercel.app](https://prepup-amber.vercel.app) and sign in with Google.
+2. Add two or three terms you want to learn.
+3. Open **Claude setup** (top right) and copy the connector URL.
+4. In Claude, go to **Settings › Connectors › Add custom connector**, paste the URL, connect, and sign in with the same Google account.
+5. Start a new chat and say **"test me on my PrepUp topics"**.
+
+Add the connector once on the web or desktop app; it then works in Claude on your phone too. On the **Claude setup** page you can also choose how you want to be tested.
+
+## What it costs, and your data
+
+- **Free to use.** The hosted copy runs on free hosting plans. Its live [costs page](https://prepup-amber.vercel.app/#/costs) shows what it costs to run, how full it is, and the limits each person gets (500 topics; 120 requests a minute).
+- **Your data:** your topics, scores, explanations, test answers and sign-in email are stored. Only you can read your deck. **Delete my data** at the foot of the page removes everything except the sign-in record.
+- **Open source** under the [MIT license](LICENSE). To run your own copy on free plans, see [docs/self-hosting.md](docs/self-hosting.md).
+
+The rest of this page is for people who want to know how it's built, or to work on it.
 
 ## How it fits together
 
@@ -57,7 +88,9 @@ Built to be shared on free tiers, so one account can't crowd out the rest:
 - **Delete my data** (foot of the page) removes every topic, score, explanation and history row you have.
 - **Nightly encrypted backups** through GitHub Actions: see [docs/backups.md](docs/backups.md).
 
-All four numbers are environment variables (`.env.example`).
+- **A public costs page** (`#/costs`, no sign-in) shows the host's monthly cost, how full the database is, and these limits. It gives totals only, and the totals are read at most once every five minutes however many people open it. A host can add a support link with `SUPPORT_URL`.
+
+The limits and the costs page settings are environment variables (`.env.example`).
 
 ## Design decisions
 
@@ -110,5 +143,5 @@ Deploying: see [docs/deploy-vercel.md](docs/deploy-vercel.md). Google and GitHub
 - **M6** Generalize: Claude setup page with an editable testing style, MIT license, self-host guide
 - **M7** Topic dependencies: "builds on" links proposed by Claude and confirmed by you, chips in the card pop-up, prerequisites first in Prep now and in tests
 - Graph view: the deck as a pannable, zoomable board of topics and links
-- **M8** Public launch
+- **M8** Public launch: a README for newcomers, a public costs page, an optional support link
 - **v2.5** FSRS scheduling in place of the fixed 14 days

@@ -20,6 +20,13 @@ export function bootstrap(config: Config) {
       perMinute: config.RATE_LIMIT_PER_MINUTE,
       perDay: config.RATE_LIMIT_PER_DAY,
     },
+    host: {
+      monthlyCostUsd: config.HOSTING_COST_PER_MONTH,
+      sourceUrl: config.SOURCE_URL,
+      databaseLimitMb: config.DATABASE_LIMIT_MB,
+      maxTopics: config.MAX_TOPICS_PER_USER,
+      ...(config.SUPPORT_URL ? { supportUrl: config.SUPPORT_URL } : {}),
+    },
     ...(config.SUPABASE_URL ? { supabaseUrl: config.SUPABASE_URL } : {}),
     ...(config.SUPABASE_PUBLISHABLE_KEY ? { supabasePublishableKey: config.SUPABASE_PUBLISHABLE_KEY } : {}),
   });

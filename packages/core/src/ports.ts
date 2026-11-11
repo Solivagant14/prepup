@@ -3,7 +3,7 @@
  * the Postgres adapter in @prepup/db and the in-memory adapter used in tests
  * both implement this interface.
  */
-import type { EventKind, EventSource, Importance, Score, TopicRef } from "@prepup/contracts";
+import type { EventKind, EventSource, HostUsage, Importance, Score, TopicRef } from "@prepup/contracts";
 import type { LinkPair } from "./links.js";
 
 export interface TopicRecord {
@@ -120,4 +120,7 @@ export interface PrepUpRepository {
   deleteUserData(userId: string): Promise<void>;
 
   listEvents(workspaceId: string, userId: string, topicId: string): Promise<EventRecord[]>;
+
+  /** Totals across the whole host, for the public costs page. The one query that isn't scoped to a workspace: it returns counts only. */
+  hostUsage(): Promise<HostUsage>;
 }

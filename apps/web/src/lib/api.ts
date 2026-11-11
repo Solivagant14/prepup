@@ -1,5 +1,5 @@
 /** A thin client for the PrepUp REST API. Every call carries the signed-in user's token. */
-import type { OAuthProvider, ReviewEventView, TopicView, UserSettingsView } from "@prepup/contracts";
+import type { HostStatusView, OAuthProvider, ReviewEventView, TopicView, UserSettingsView } from "@prepup/contracts";
 
 export interface AppConfig {
   authMode: "supabase" | "dev";
@@ -7,7 +7,14 @@ export interface AppConfig {
   supabasePublishableKey: string | null;
   /** Social sign-in buttons to show; empty means email and password only. */
   providers: OAuthProvider[];
+  /** A "support this host" link, when the host set one. */
+  supportUrl: string | null;
+  /** Where the code lives. */
+  sourceUrl: string;
 }
+
+/** The two outside links shown at the foot of every screen. */
+export type HostLinkTargets = Pick<AppConfig, "supportUrl" | "sourceUrl">;
 
 /** Everything the "Claude setup" page shows, straight from the server's own definitions. */
 export interface ConnectorInfo {
@@ -34,6 +41,13 @@ export class ApiError extends Error {
 export async function loadConfig(): Promise<AppConfig> {
   const res = await fetch("/app-config");
   if (!res.ok) throw new ApiError(res.status, "Could not reach PrepUp");
+  return res.json();
+}
+
+/** The public costs page's numbers. No sign-in needed. */
+export async function loadHostStatus(): Promise<HostStatusView> {
+  const res = await fetch("/host-status");
+  if (!res.ok) throw new ApiError(res.status, "Could not load the costs right now");
   return res.json();
 }
 
