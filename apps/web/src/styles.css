@@ -60,6 +60,39 @@ button { cursor: pointer; }
 .stat-num { font-family: var(--mono); font-size: 20px; }
 .stat-label { font-size: 12px; color: var(--muted); }
 
+.views { display: flex; gap: 20px; border-bottom: 1px solid var(--line); }
+.view-tab { position: relative; height: 40px; padding: 0 2px; border: none; background: none; color: var(--muted); font-size: 14px; font-weight: 500; }
+.view-tab:hover { color: var(--ink); }
+.view-tab[aria-selected="true"] { color: var(--ink); }
+.view-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--ink); border-radius: 2px; }
+.view-hint { margin-top: -8px; }
+
+/* Graph view: a board that pans and zooms. touch-action: none hands every gesture on it to the board. */
+.board { position: relative; height: clamp(360px, 68dvh, 760px); overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background-color: var(--surface); background-image: radial-gradient(circle, #d9d9de 1px, transparent 1.2px); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; overscroll-behavior: contain; }
+.board.dragging { cursor: grabbing; }
+.board-plane { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.board-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.board-edges path { fill: none; stroke: #a1a1aa; stroke-width: 1.5; transition: opacity 0.12s, stroke 0.12s; }
+.board-edges marker path { stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: none; }
+.board-edges marker path.arrow-on { stroke: var(--accent); }
+.board-edges path.on { stroke: var(--accent); stroke-width: 2; }
+.board-edges path.off { opacity: 0.25; }
+.board-label { position: absolute; font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; letter-spacing: 0.01em; }
+.board-label .mono { margin-left: 4px; }
+.node { position: absolute; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; padding: 9px 12px; text-align: left; border: 1px solid; border-radius: 10px; cursor: pointer; transition: opacity 0.12s, box-shadow 0.12s; }
+.board.dragging .node { cursor: grabbing; }
+.node:hover, .node.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.node.off { opacity: 0.4; }
+.node-term { font-size: 14px; font-weight: 500; line-height: 1.25; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; opacity: 0.82; white-space: nowrap; }
+.board-controls { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 1px 3px rgba(24, 24, 27, 0.08); cursor: default; }
+.board-controls button { min-width: 36px; height: 36px; padding: 0 8px; border: none; border-radius: 7px; background: transparent; font-size: 16px; }
+.board-controls button:hover:not(:disabled) { background: var(--sunken); }
+.board-controls button:disabled { opacity: 0.35; cursor: default; }
+.board-controls .fit { font-size: 13px; font-weight: 500; }
+.board-controls span { min-width: 44px; text-align: center; font-size: 12px; color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { .board-edges path, .node { transition: none; } }
+
 .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .tab { height: 36px; padding: 0 12px; border-radius: 8px; border: none; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }

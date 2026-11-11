@@ -31,7 +31,7 @@ flowchart TB
 | `packages/core` | Scoring, fade and link rules (pure functions), `PrepUpService`, the repository port |
 | `packages/db` | Drizzle schema, SQL migrations, the Postgres adapter |
 | `apps/api` | Hono HTTP server: REST routes, the MCP server at `/mcp`, token checks, OAuth consent page |
-| `apps/web` | React + Vite web app: the card deck, progress tracker and card pop-up |
+| `apps/web` | React + Vite web app: the card deck, the graph view, progress tracker and card pop-up |
 | `scripts/build-vercel.mjs` | Builds the web app and the API into Vercel's Build Output format |
 
 ## The rules
@@ -44,6 +44,7 @@ flowchart TB
 - **Your style, PrepUp's rules.** On the Claude setup page you write how you want to be tested. A short list of fixed rules (one topic at a time, no peeking at your notes, nothing saved without your yes) always comes first, and no style can override them. Both live in `packages/core/src/testing.ts`, which the MCP server and the page both read.
 - **Duplicates merge.** "LangChain", "lang chain" and "Lang-Chain" are one card.
 - **Topics build on topics.** RAG builds on Embeddings and Vector databases. When you add a topic through Claude, `add_topic` returns similar topics already in your deck (a plain text match), Claude proposes links, and nothing is linked until you say yes. The card pop-up shows *Builds on* and *Needed for* as chips. Links can't form a loop (the core rejects one, naming the topics), a topic can build on at most 20 others, and deleting a topic removes its links.
+- **Two views of one deck.** *Cards* is the grid; *Graph* draws the same topics as a board you can pan and zoom, with what a topic builds on to its left and unlinked topics in a group underneath. Tap a topic in either view to open its card. The graph is for looking: links are still added and removed in the card or through Claude.
 - **Links never touch scores.** They don't change a score or the fade clock. They do two things: *Prep now* lists a topic's prerequisites ahead of it, and during a test Claude takes a weaker prerequisite first.
 
 ## Limits and safety
@@ -108,5 +109,6 @@ Deploying: see [docs/deploy-vercel.md](docs/deploy-vercel.md). Google and GitHub
 - **M5** Hardening for other users: rate limits, topic caps, audience check, backups, delete my data
 - **M6** Generalize: Claude setup page with an editable testing style, MIT license, self-host guide
 - **M7** Topic dependencies: "builds on" links proposed by Claude and confirmed by you, chips in the card pop-up, prerequisites first in Prep now and in tests
+- Graph view: the deck as a pannable, zoomable board of topics and links
 - **M8** Public launch
 - **v2.5** FSRS scheduling in place of the fixed 14 days
