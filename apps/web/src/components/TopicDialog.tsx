@@ -1,18 +1,31 @@
-/** The card pop-up: importance, score, explanation, freshness, history and the test prompt. */
-import type { Importance, TopicView } from "@prepup/contracts";
+/** The card pop-up: importance, score, explanation, links, freshness, history and the test prompt. */
+import type { Importance, TopicRef, TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { Api } from "../lib/api.js";
-import { cardLook, daysAgo, eventLabel, explanationNote, freshnessText, IMPORTANCES, testPrompt } from "../lib/deck.js";
+import {
+  cardLook,
+  daysAgo,
+  eventLabel,
+  explanationNote,
+  freshnessText,
+  IMPORTANCES,
+  prerequisiteOptions,
+  testPrompt,
+} from "../lib/deck.js";
 
 interface Props {
   api: Api;
   topic: TopicView;
+  /** The whole deck: what the prerequisite search looks through. */
+  topics: TopicView[];
+  /** Opens another card in place of this one (a tapped chip). */
+  onOpenTopic: (id: string) => void;
   onClose: () => void;
   onDeleted: (term: string) => void;
 }
 
-export function TopicDialog({ api, topic, onClose, onDeleted }: Props) {
+export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDeleted }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const qc = useQueryClient();
   const [explanation, setExplanation] = useState(topic.explanation);
@@ -20,6 +33,9 @@ export function TopicDialog({ api, topic, onClose, onDeleted }: Props) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     const d = ref.current;
@@ -47,6 +63,48 @@ export function TopicDialog({ api, topic, onClose, onDeleted }: Props) {
     },
     onError,
   });
+
+  const onLinkChange = {
+    onMutate: () => setLinkError(null),
+    onSuccess: () => {
+      setAdding(false);
+      setQuery("");
+      refresh();
+    },
+    // The deck may have changed elsewhere (say, Claude linked something): reload it so the options are right.
+    onError: (e: Error) => {
+      setLinkError(e.message);
+      refresh();
+    },
+  };
+  const link = useMutation({ mutationFn: (buildsOnId: string) => api.linkTopic(topic.id, buildsOnId), ...onLinkChange });
+  const unlink = useMutation({
+    mutationFn: (pair: { topicId: string; buildsOnId: string }) => api.unlinkTopic(pair.topicId, pair.buildsOnId),
+    ...onLinkChange,
+  });
+  const linking = link.isPending || unlink.isPending;
+  const found = adding ? prerequisiteOptions(topic, topics, query) : null;
+
+  const chips = (refs: TopicRef[], pairFor: (other: TopicRef) => { topicId: string; buildsOnId: string }) => (
+    <ul className="chips">
+      {refs.map((other) => (
+        <li key={other.id} className="chip">
+          <button type="button" className="chip-open" onClick={() => onOpenTopic(other.id)} aria-label={`Open ${other.term}`}>
+            {other.term}
+          </button>
+          <button
+            type="button"
+            className="chip-remove"
+            aria-label={`Remove the link to ${other.term}`}
+            disabled={linking}
+            onClick={() => unlink.mutate(pairFor(other))}
+          >
+            ×
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 
   const remove = useMutation({
     mutationFn: () => api.deleteTopic(topic.id),
@@ -180,6 +238,80 @@ export function TopicDialog({ api, topic, onClose, onDeleted }: Props) {
             onChange={(e) => setExplanation(e.target.value)}
           />
         </div>
+
+        <div className="field">
+          <div className="fresh-row">
+            <span className="field-label" id="builds-on-label">
+              Builds on
+            </span>
+            <span className="small">what to learn first</span>
+          </div>
+          {topic.buildsOn.length > 0 && chips(topic.buildsOn, (other) => ({ topicId: topic.id, buildsOnId: other.id }))}
+          {adding ? (
+            <div className="link-search">
+              <div className="link-search-row">
+                <label htmlFor="prerequisite-search" className="sr-only">
+                  Search your topics for a prerequisite
+                </label>
+                <input
+                  id="prerequisite-search"
+                  autoFocus
+                  autoComplete="off"
+                  placeholder="Search your topics…"
+                  value={query}
+                  maxLength={80}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setAdding(false);
+                    setQuery("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {found!.options.length > 0 ? (
+                <ul className="link-options" aria-label="Topics you can link">
+                  {found!.options.map((o) => (
+                    <li key={o.id}>
+                      <button type="button" disabled={o.blocked !== null || linking} onClick={() => link.mutate(o.id)}>
+                        <span>{o.term}</span>
+                        {o.blocked && <span className="small">{o.blocked}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="small">
+                  {topics.length <= 1 ? "Add another topic to your deck first." : "No other topic matches."}
+                </span>
+              )}
+              {found!.more > 0 && <span className="small">{found!.more} more · keep typing to narrow it down</span>}
+            </div>
+          ) : (
+            <button type="button" className="btn add-link" onClick={() => setAdding(true)}>
+              + Add prerequisite
+            </button>
+          )}
+          {linkError && (
+            <p className="error" role="alert" style={{ margin: 0 }}>
+              {linkError}
+            </p>
+          )}
+        </div>
+
+        {topic.neededFor.length > 0 && (
+          <div className="field">
+            <div className="fresh-row">
+              <span className="field-label">Needed for</span>
+              <span className="small">what builds on this</span>
+            </div>
+            {chips(topic.neededFor, (other) => ({ topicId: other.id, buildsOnId: topic.id }))}
+          </div>
+        )}
 
         {(history.data?.length ?? 0) > 0 && (
           <div className="field">

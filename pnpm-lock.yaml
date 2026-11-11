@@ -66,6 +66,9 @@ importers:
       '@prepup/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@prepup/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@supabase/supabase-js':
         specifier: ^2.119.0
         version: 2.119.0

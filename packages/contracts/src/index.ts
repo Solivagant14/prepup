@@ -17,6 +17,12 @@ export const LEVEL_NAMES = ["Shaky", "Learning", "Getting there", "Confident", "
 /** How many topics one workspace may hold unless the host sets another cap. Matches the largest list page. */
 export const DEFAULT_MAX_TOPICS = 500;
 
+/** How many topics one topic may build on directly. Keeps a card readable and the loop check cheap. */
+export const MAX_PREREQUISITES = 20;
+
+/** How many look-alike topics a capture returns, for Claude to propose links from. */
+export const SIMILAR_TOPICS_LIMIT = 5;
+
 export const TOPIC_FILTERS = ["all", "prep", "fading_week", "confident"] as const;
 export const TopicFilter = z.enum(TOPIC_FILTERS);
 export type TopicFilter = z.infer<typeof TopicFilter>;
@@ -47,7 +53,7 @@ export type AddTopicInput = z.infer<typeof AddTopicInput>;
 
 export const ListTopicsInput = z.object({
   filter: TopicFilter.default("all").describe(
-    "all = every topic; prep = weakest topics (score 1-2), most important first; fading_week = drops within 7 days; confident = score 4+",
+    "all = every topic; prep = weakest topics (score 1-2), most important first, with prerequisites ahead of what builds on them; fading_week = drops within 7 days; confident = score 4+",
   ),
   limit: z.number().int().min(1).max(500).default(20),
 });
@@ -78,6 +84,30 @@ export const GetTopicInput = z.object({
   term: Term.describe("The topic to read, as it appears in PrepUp"),
 });
 export type GetTopicInput = z.infer<typeof GetTopicInput>;
+
+/** A "builds on" link named by terms: how Claude says it. */
+export const LinkTopicsInput = z.object({
+  term: Term.describe("The topic that builds on the other, as it appears in PrepUp, e.g. 'RAG'"),
+  buildsOnTerm: Term.describe("The prerequisite: what it builds on, as it appears in PrepUp, e.g. 'Embeddings'"),
+});
+export type LinkTopicsInput = z.infer<typeof LinkTopicsInput>;
+
+/** The same link named by id: how the web app says it. The topic itself is in the URL. */
+export const LinkTopicInput = z.object({
+  buildsOnId: z.uuid("Pick a topic to build on"),
+});
+export type LinkTopicInput = z.infer<typeof LinkTopicInput>;
+
+export const SearchTopicsInput = z.object({
+  query: z
+    .string()
+    .trim()
+    .min(1, "Type something to search for")
+    .max(80, "Keep searches under 80 characters")
+    .describe("Words or part of a term, e.g. 'vector'"),
+  limit: z.number().int().min(1).max(50).default(10),
+});
+export type SearchTopicsInput = z.input<typeof SearchTopicsInput>;
 
 export const SetScoreInput = z.object({ score: Score });
 export type SetScoreInput = z.infer<typeof SetScoreInput>;
@@ -112,6 +142,12 @@ export interface UserSettingsView {
   updatedAt: string | null;
 }
 
+/** Just enough of a topic to name it and open it. */
+export interface TopicRef {
+  id: string;
+  term: string;
+}
+
 /** What every client sees for a topic. Scores here are already decayed. */
 export interface TopicView {
   id: string;
@@ -131,6 +167,10 @@ export interface TopicView {
   fadingSoon: boolean;
   fadingThisWeek: boolean;
   priority: number;
+  /** Its prerequisites: the topics this one builds on. Links never change a score or the fade clock. */
+  buildsOn: TopicRef[];
+  /** The topics that build on this one. */
+  neededFor: TopicRef[];
 }
 
 export interface ReviewEventView {

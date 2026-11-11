@@ -112,6 +112,15 @@ export function createApp(opts: AppOptions) {
   app.delete("/api/topics/:id", async (c) => c.json({ deleted: await svc.deleteTopic(c.var.actor, uuidParam(c)) }));
   app.get("/api/topics/:id/history", async (c) => c.json(await svc.history(c.var.actor, uuidParam(c))));
 
+  // "Builds on" links. Both answer with the topic as it now stands.
+  app.post("/api/topics/:id/links", async (c) => {
+    const { topic, created } = await svc.linkTopics(c.var.actor, uuidParam(c), await body(c));
+    return c.json(topic, created ? 201 : 200);
+  });
+  app.delete("/api/topics/:id/links/:buildsOnId", async (c) =>
+    c.json((await svc.unlinkTopics(c.var.actor, uuidParam(c), uuidParam(c, "buildsOnId"))).topic),
+  );
+
   // Personal settings, and everything the "Claude setup" page shows. The tool
   // list and rules come from the same definitions the MCP server uses.
   app.get("/api/settings", async (c) => c.json(await svc.getSettings(c.var.actor)));
@@ -169,8 +178,8 @@ async function isInitialize(request: Request): Promise<boolean> {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function uuidParam(c: Context): string {
-  const id = c.req.param("id") ?? "";
+function uuidParam(c: Context, name = "id"): string {
+  const id = c.req.param(name) ?? "";
   if (!UUID.test(id)) throw new DomainError("not_found", "Topic not found");
   return id;
 }

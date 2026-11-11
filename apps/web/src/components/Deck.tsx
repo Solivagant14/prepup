@@ -3,7 +3,7 @@ import type { TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type KeyboardEvent } from "react";
 import type { Api } from "../lib/api.js";
-import { matches, summarize, TABS, type Tab } from "../lib/deck.js";
+import { shownIn, summarize, TABS, type Tab } from "../lib/deck.js";
 import { CLAUDE_SETUP } from "../lib/route.js";
 import { DeleteAccount } from "./DeleteAccount.js";
 import { TopicCard } from "./TopicCard.js";
@@ -35,7 +35,7 @@ export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
   };
 
   const all = topics.data ?? [];
-  const shown = all.filter((t) => matches(tab, t));
+  const shown = shownIn(tab, all);
   const summary = summarize(all);
   const counts: Record<Tab, number> = {
     all: summary.total,
@@ -116,8 +116,12 @@ export function Deck({ api, onSignOut }: { api: Api; onSignOut?: () => void }) {
 
       {open && (
         <TopicDialog
+          // A new key per card, so tapping a chip opens the other card with a clean slate.
+          key={open.id}
           api={api}
           topic={open}
+          topics={all}
+          onOpenTopic={setOpenId}
           onClose={() => setOpenId(null)}
           onDeleted={(term) => setStatus({ text: `Deleted "${term}"` })}
         />

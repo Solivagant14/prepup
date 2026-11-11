@@ -1,4 +1,4 @@
-import { InMemoryRepository, PrepUpService } from "@prepup/core";
+import { FIXED_RULES, InMemoryRepository, PrepUpService } from "@prepup/core";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
@@ -286,7 +286,7 @@ describe("MCP", () => {
       url: string;
       tools: Array<{ name: string; description: string }>;
       prompts: Array<{ name: string }>;
-      fixedRules: Array<{ rule: string; why: string }>;
+      fixedRules: Array<{ id: string; rule: string; why: string }>;
       presets: Array<{ id: string }>;
       settings: { preset: string };
     };
@@ -297,7 +297,8 @@ describe("MCP", () => {
     expect(byName(page.tools)).toEqual(byName(live));
     const prompts = (await mcp(USER, "prompts/list")).result.prompts as Array<{ name: string }>;
     expect(page.prompts.map((p) => p.name).sort()).toEqual(prompts.map((p) => p.name).sort());
-    expect(page.fixedRules.length).toBeGreaterThan(4);
+    expect(page.fixedRules.map((r) => r.id)).toEqual(FIXED_RULES.map((r) => r.id));
+    expect(page.fixedRules).toHaveLength(9);
     expect(page.presets.map((p) => p.id)).toEqual(["interviewer", "tutor", "drill"]);
     expect(page.settings.preset).toBe("interviewer");
     expect((await app.request("/api/connector")).status).toBe(401);
@@ -314,8 +315,11 @@ describe("MCP", () => {
     expect(tools.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
       "add_topic",
       "get_topic",
+      "link_topics",
       "list_topics",
       "record_review",
+      "search_topics",
+      "unlink_topics",
       "whoami",
     ]);
     const prompts = await mcp(USER, "prompts/list");
@@ -377,6 +381,219 @@ describe("MCP", () => {
   it("rejects bad tool input instead of saving it", async () => {
     const res = await mcp(USER, "tools/call", { name: "record_review", arguments: { term: "x", score: 9, feedback: "?" } });
     expect(res.result?.isError ?? Boolean(res.error)).toBe(true);
+  });
+});
+
+describe("topic links over REST", () => {
+  const add = async (user: string, term: string) => {
+    const res = await app.request("/api/topics", as(user, { method: "POST", body: JSON.stringify({ term }) }));
+    return ((await res.json()) as { id: string }).id;
+  };
+  const link = (user: string, id: string, buildsOnId: unknown) =>
+    app.request(`/api/topics/${id}/links`, as(user, { method: "POST", body: JSON.stringify({ buildsOnId }) }));
+
+  it("links, lists and unlinks, answering with the topic each time", async () => {
+    const [rag, embeddings] = [await add(USER, "RAG"), await add(USER, "Embeddings")];
+
+    const created = await link(USER, rag, embeddings);
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ term: "RAG", buildsOn: [{ id: embeddings, term: "Embeddings" }], neededFor: [] });
+    expect((await link(USER, rag, embeddings)).status).toBe(200);
+
+    const list = (await (await app.request("/api/topics", as(USER))).json()) as Array<{ term: string; neededFor: unknown[] }>;
+    expect(list.find((t) => t.term === "Embeddings")!.neededFor).toEqual([{ id: rag, term: "RAG" }]);
+
+    const removed = await app.request(`/api/topics/${rag}/links/${embeddings}`, as(USER, { method: "DELETE" }));
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toMatchObject({ term: "RAG", buildsOn: [] });
+    // Removing it again is not an error.
+    expect((await app.request(`/api/topics/${rag}/links/${embeddings}`, as(USER, { method: "DELETE" }))).status).toBe(200);
+  });
+
+  it("refuses loops and self-links with a message the web app can show", async () => {
+    const [rag, embeddings] = [await add(USER, "RAG"), await add(USER, "Embeddings")];
+    await link(USER, rag, embeddings);
+
+    const loop = await link(USER, embeddings, rag);
+    expect(loop.status).toBe(422);
+    expect(await loop.json()).toEqual({
+      error: "rule",
+      message: `"Embeddings" can't build on "RAG": "RAG" already builds on "Embeddings", so this would make a loop.`,
+    });
+    const self = await link(USER, rag, rag);
+    expect(self.status).toBe(422);
+    expect(await self.json()).toMatchObject({ message: `"RAG" can't build on itself.` });
+  });
+
+  it("validates input and keeps other users out", async () => {
+    const [rag, embeddings] = [await add(USER, "RAG"), await add(USER, "Embeddings")];
+    const theirs = await add(OTHER, "Embeddings");
+
+    const bad = await link(USER, rag, "not-a-uuid");
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: "invalid", message: expect.stringContaining("Pick a topic to build on") });
+    expect((await link(USER, rag, undefined)).status).toBe(400);
+    const noJson = await app.request(`/api/topics/${rag}/links`, as(USER, { method: "POST", body: "{" }));
+    expect(await noJson.json()).toMatchObject({ error: "invalid", message: "Request body must be JSON" });
+
+    // Someone else's topic is simply not found, on either side of the link and for either verb.
+    expect((await link(USER, rag, theirs)).status).toBe(404);
+    expect((await link(OTHER, rag, theirs)).status).toBe(404);
+    expect((await link(OTHER, rag, embeddings)).status).toBe(404);
+    await link(USER, rag, embeddings);
+    expect((await app.request(`/api/topics/${rag}/links/${embeddings}`, as(OTHER, { method: "DELETE" }))).status).toBe(404);
+    expect((await app.request(`/api/topics/${rag}/links/nope`, as(USER, { method: "DELETE" }))).status).toBe(404);
+    expect(((await (await app.request(`/api/topics/${rag}`, as(USER))).json()) as { buildsOn: unknown[] }).buildsOn).toHaveLength(1);
+  });
+
+  it("answers 401 without a sign-in", async () => {
+    const id = "33333333-3333-4333-8333-333333333333";
+    const post = await app.request(`/api/topics/${id}/links`, { method: "POST", body: JSON.stringify({ buildsOnId: id }) });
+    expect(post.status).toBe(401);
+    expect((await app.request(`/api/topics/${id}/links/${id}`, { method: "DELETE" })).status).toBe(401);
+  });
+
+  it("drops a deleted topic's links from the cards around it", async () => {
+    const [agents, rag, embeddings] = [await add(USER, "Agents"), await add(USER, "RAG"), await add(USER, "Embeddings")];
+    await link(USER, agents, rag);
+    await link(USER, rag, embeddings);
+    await app.request(`/api/topics/${rag}`, as(USER, { method: "DELETE" }));
+    const list = (await (await app.request("/api/topics", as(USER))).json()) as Array<{ buildsOn: unknown[]; neededFor: unknown[] }>;
+    expect(list.map((t) => [t.buildsOn, t.neededFor])).toEqual([
+      [[], []],
+      [[], []],
+    ]);
+  });
+});
+
+describe("topic links over MCP", () => {
+  const call = async (user: string, name: string, args: Record<string, unknown>) => {
+    const res = await mcp(user, "tools/call", { name, arguments: args });
+    return { text: (res.result?.content?.[0]?.text ?? "") as string, isError: Boolean(res.result?.isError ?? res.error) };
+  };
+  const data = (text: string) => JSON.parse(text.slice(text.indexOf("\n\n") + 2));
+
+  it("returns similar topics on capture and links only when asked to", async () => {
+    await call(USER, "add_topic", { term: "Embeddings" });
+    await call(USER, "add_topic", { term: "Vector databases" });
+    const added = await call(USER, "add_topic", { term: "Embedding models" });
+    expect(added.text).toMatch(/Added "Embedding models".*ask the user before linking/s);
+    expect(data(added.text)).toMatchObject({ term: "Embedding models", similarTopics: ["Embeddings"], buildsOn: [] });
+    const plain = await call(USER, "add_topic", { term: "Evals" });
+    expect(plain.text).not.toMatch(/linking/);
+    expect(data(plain.text).similarTopics).toEqual([]);
+
+    const linked = await call(USER, "link_topics", { term: "embedding models", buildsOnTerm: "embeddings" });
+    expect(linked.isError).toBe(false);
+    expect(linked.text).toMatch(/Linked: "Embedding models" now builds on "Embeddings"\./);
+    expect(data(linked.text).buildsOn).toEqual(["Embeddings"]);
+    expect((await call(USER, "link_topics", { term: "Embedding models", buildsOnTerm: "Embeddings" })).text).toMatch(
+      /already builds on "Embeddings"; nothing changed/,
+    );
+  });
+
+  it("shows links in get_topic and list_topics, and sorts prep by them", async () => {
+    for (const term of ["RAG", "Embeddings", "Vector databases"]) await call(USER, "add_topic", { term });
+    await call(USER, "link_topics", { term: "RAG", buildsOnTerm: "Embeddings" });
+    await call(USER, "link_topics", { term: "RAG", buildsOnTerm: "Vector databases" });
+
+    expect(data((await call(USER, "get_topic", { term: "RAG" })).text)).toMatchObject({
+      buildsOn: ["Embeddings", "Vector databases"],
+      neededFor: [],
+    });
+    expect(data((await call(USER, "get_topic", { term: "Embeddings" })).text)).toMatchObject({ buildsOn: [], neededFor: ["RAG"] });
+
+    const topics = (await (await app.request("/api/topics", as(USER))).json()) as Array<{ id: string; term: string }>;
+    const rag = topics.find((t) => t.term === "RAG")!;
+    await app.request(`/api/topics/${rag.id}`, as(USER, { method: "PATCH", body: JSON.stringify({ importance: "high" }) }));
+    const prep = data((await call(USER, "list_topics", { filter: "prep" })).text) as Array<{ term: string; buildsOn: string[] }>;
+    expect(prep.map((t) => t.term)).toEqual(["Embeddings", "Vector databases", "RAG"]);
+    expect(prep.at(-1)!.buildsOn).toEqual(["Embeddings", "Vector databases"]);
+    const all = data((await call(USER, "list_topics", {})).text) as Array<{ term: string }>;
+    expect(all[0]!.term).toBe("RAG");
+  });
+
+  it("refuses loops, unknown topics and self-links as readable tool errors", async () => {
+    for (const term of ["Agents", "RAG", "Embeddings"]) await call(USER, "add_topic", { term });
+    await call(USER, "link_topics", { term: "Agents", buildsOnTerm: "RAG" });
+    await call(USER, "link_topics", { term: "RAG", buildsOnTerm: "Embeddings" });
+
+    const loop = await call(USER, "link_topics", { term: "Embeddings", buildsOnTerm: "Agents" });
+    expect(loop.isError).toBe(true);
+    expect(loop.text).toBe(
+      `"Embeddings" can't build on "Agents": "Agents" already builds on "Embeddings" (through another topic), so this would make a loop.`,
+    );
+    expect(await call(USER, "link_topics", { term: "RAG", buildsOnTerm: "rag" })).toEqual({
+      isError: true,
+      text: `"RAG" can't build on itself.`,
+    });
+    expect(await call(USER, "link_topics", { term: "RAG", buildsOnTerm: "Transformers" })).toEqual({
+      isError: true,
+      text: 'No topic called "Transformers" in PrepUp',
+    });
+    expect((await call(USER, "link_topics", { term: "RAG" })).isError).toBe(true);
+    expect((await call(USER, "link_topics", { term: "", buildsOnTerm: "RAG" })).isError).toBe(true);
+    // Another user's deck has none of these topics, so nothing of this one's can be linked or unlinked from there.
+    expect((await call(OTHER, "unlink_topics", { term: "RAG", buildsOnTerm: "Embeddings" })).isError).toBe(true);
+    expect(data((await call(USER, "get_topic", { term: "RAG" })).text).buildsOn).toEqual(["Embeddings"]);
+  });
+
+  it("unlinks, and says so when there was nothing to remove", async () => {
+    for (const term of ["RAG", "Embeddings"]) await call(USER, "add_topic", { term });
+    await call(USER, "link_topics", { term: "RAG", buildsOnTerm: "Embeddings" });
+    const gone = await call(USER, "unlink_topics", { term: "RAG", buildsOnTerm: "Embeddings" });
+    expect(gone.text).toMatch(/Unlinked: "RAG" no longer builds on "Embeddings"\./);
+    expect(data(gone.text).buildsOn).toEqual([]);
+    expect((await call(USER, "unlink_topics", { term: "RAG", buildsOnTerm: "Embeddings" })).text).toMatch(
+      /wasn't linked to "Embeddings"; nothing changed/,
+    );
+    expect((await call(USER, "list_topics", {})).text).toContain('"term": "Embeddings"');
+  });
+
+  it("searches by text without revealing explanations", async () => {
+    for (const term of ["Vector databases", "Vector search", "RAG"]) await call(USER, "add_topic", { term });
+    await call(OTHER, "add_topic", { term: "Vector clocks" });
+    const topics = (await (await app.request("/api/topics", as(USER))).json()) as Array<{ id: string; term: string }>;
+    const search = topics.find((t) => t.term === "Vector search")!;
+    await app.request(
+      `/api/topics/${search.id}`,
+      as(USER, { method: "PATCH", body: JSON.stringify({ explanation: "Find the nearest vectors." }) }),
+    );
+
+    const found = await call(USER, "search_topics", { query: "vector" });
+    expect(found.text).toMatch(/^2 topic\(s\) match "vector"\./);
+    expect(data(found.text).map((t: { term: string }) => t.term)).toEqual(["Vector databases", "Vector search"]);
+    expect(found.text).not.toContain("nearest vectors");
+    expect(data(found.text)[1]).toMatchObject({ hasExplanation: true, score: 1 });
+    expect(data((await call(USER, "search_topics", { query: "vector", limit: 1 })).text)).toHaveLength(1);
+    expect((await call(USER, "search_topics", { query: "kubernetes" })).text).toMatch(/^0 topic/);
+    expect((await call(USER, "search_topics", { query: "" })).isError).toBe(true);
+    expect((await call(USER, "search_topics", { query: "x", limit: 500 })).isError).toBe(true);
+  });
+
+  it("says in every link tool that the user must confirm first, and tells Claude so at connect", async () => {
+    const tools = (await mcp(USER, "tools/list")).result.tools as Array<{
+      name: string;
+      description: string;
+      inputSchema: { required?: string[] };
+      annotations?: { readOnlyHint?: boolean };
+    }>;
+    const tool = (name: string) => tools.find((t) => t.name === name)!;
+    expect(tool("link_topics").description).toMatch(/Only call after the user has said yes/);
+    expect(tool("unlink_topics").description).toMatch(/Only call after the user has confirmed/);
+    expect(tool("add_topic").description).toMatch(/links nothing itself/);
+    expect(tool("link_topics").inputSchema.required).toEqual(["term", "buildsOnTerm"]);
+    expect(tool("unlink_topics").inputSchema.required).toEqual(["term", "buildsOnTerm"]);
+    expect(tool("search_topics").annotations?.readOnlyHint).toBe(true);
+
+    const init = await mcp(USER, "initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "test", version: "1" },
+    });
+    expect(init.result.serverInfo.version).toBe("0.4.0");
+    expect(init.result.instructions).toMatch(/call link_topics only after they say yes/);
+    expect(init.result.instructions).toMatch(/builds on is weaker, test that prerequisite first/);
   });
 });
 

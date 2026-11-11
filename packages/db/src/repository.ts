@@ -4,14 +4,54 @@
  * can never read or change another workspace's rows through this class.
  */
 import type { Importance, Score } from "@prepup/contracts";
-import type { ChangeSet, EventRecord, PrepUpRepository, TopicRecord, TopicState } from "@prepup/core";
+import type {
+  ChangeSet,
+  EventRecord,
+  LinkPair,
+  PrepUpRepository,
+  TopicLink,
+  TopicLinks,
+  TopicRecord,
+  TopicState,
+} from "@prepup/core";
 import type { EventSource } from "@prepup/contracts";
-import { and, count, desc, eq, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, or } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema.js";
-import { memberships, rateLimits, reviewEvents, topicSettings, topics, userSettings, workspaces } from "./schema.js";
+import {
+  memberships,
+  rateLimits,
+  reviewEvents,
+  topicLinks,
+  topicSettings,
+  topics,
+  userSettings,
+  workspaces,
+} from "./schema.js";
 
 export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
+
+/** Postgres's code for "relation does not exist". */
+const UNDEFINED_TABLE = "42P01";
+
+/**
+ * Reading links before the topic_links migration has run gives "no links"
+ * instead of an error, so a deploy that lands ahead of the migration still
+ * shows the deck. Writing a link still fails until the table exists.
+ */
+async function noLinksUntilMigrated<T>(read: () => Promise<T>, none: T): Promise<T> {
+  try {
+    return await read();
+  } catch (err) {
+    for (let e: unknown = err; e instanceof Error; e = e.cause) {
+      if ((e as { code?: unknown }).code === UNDEFINED_TABLE && e.message.includes("topic_links")) {
+        console.error("topic_links is missing: run pnpm db:migrate. Showing topics without links.");
+        return none;
+      }
+    }
+    throw err;
+  }
+}
 
 export class PostgresRepository implements PrepUpRepository {
   constructor(private readonly db: Db) {}
@@ -87,13 +127,81 @@ export class PostgresRepository implements PrepUpRepository {
     });
   }
 
-  /** Settings and review events go with it through ON DELETE CASCADE. */
+  /** Settings, review events and links go with it through ON DELETE CASCADE. */
   async deleteTopic(workspaceId: string, topicId: string): Promise<boolean> {
     const deleted = await this.db
       .delete(topics)
       .where(and(eq(topics.workspaceId, workspaceId), eq(topics.id, topicId)))
       .returning({ id: topics.id });
     return deleted.length > 0;
+  }
+
+  async listTopicRecords(workspaceId: string): Promise<TopicRecord[]> {
+    return this.db.select().from(topics).where(eq(topics.workspaceId, workspaceId));
+  }
+
+  /**
+   * One transaction. Locking the workspace row first makes links in the same
+   * workspace save one at a time, so the core's check always sees every link
+   * that is already there: two opposite links sent together can't both pass.
+   */
+  async insertLinkIfAbsent(link: TopicLink, check: (existing: LinkPair[]) => void): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      await tx.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, link.workspaceId)).for("update");
+      // Both ends must be this workspace's topics, whatever the caller checked.
+      const ends = await tx
+        .select({ id: topics.id })
+        .from(topics)
+        .where(and(eq(topics.workspaceId, link.workspaceId), or(eq(topics.id, link.topicId), eq(topics.id, link.buildsOnId))));
+      if (ends.length !== 2) throw new Error("A link needs two different topics in the same workspace");
+      const existing = await tx
+        .select({ topicId: topicLinks.topicId, buildsOnId: topicLinks.buildsOnId })
+        .from(topicLinks)
+        .where(eq(topicLinks.workspaceId, link.workspaceId));
+      if (existing.some((l) => l.topicId === link.topicId && l.buildsOnId === link.buildsOnId)) return false;
+      check(existing);
+      const inserted = await tx.insert(topicLinks).values(link).onConflictDoNothing().returning({ id: topicLinks.topicId });
+      return inserted.length > 0;
+    });
+  }
+
+  async deleteLink(workspaceId: string, topicId: string, buildsOnId: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(topicLinks)
+      .where(
+        and(eq(topicLinks.workspaceId, workspaceId), eq(topicLinks.topicId, topicId), eq(topicLinks.buildsOnId, buildsOnId)),
+      )
+      .returning({ id: topicLinks.topicId });
+    return deleted.length > 0;
+  }
+
+  /** Both directions in one query: the join gives each row the term of the topic at the other end. */
+  async listLinksForTopic(workspaceId: string, topicId: string): Promise<TopicLinks> {
+    const query = this.db
+      .select({ topicId: topicLinks.topicId, buildsOnId: topicLinks.buildsOnId, otherId: topics.id, otherTerm: topics.term })
+      .from(topicLinks)
+      .innerJoin(
+        topics,
+        or(
+          and(eq(topicLinks.topicId, topicId), eq(topics.id, topicLinks.buildsOnId)),
+          and(eq(topicLinks.buildsOnId, topicId), eq(topics.id, topicLinks.topicId)),
+        ),
+      )
+      .where(and(eq(topicLinks.workspaceId, workspaceId), eq(topics.workspaceId, workspaceId)));
+    const rows = await noLinksUntilMigrated(() => query, []);
+    const ref = (r: (typeof rows)[number]) => ({ id: r.otherId, term: r.otherTerm });
+    return {
+      buildsOn: rows.filter((r) => r.topicId === topicId).map(ref),
+      neededFor: rows.filter((r) => r.buildsOnId === topicId).map(ref),
+    };
+  }
+
+  async listLinks(workspaceId: string): Promise<LinkPair[]> {
+    const query = this.db
+      .select({ topicId: topicLinks.topicId, buildsOnId: topicLinks.buildsOnId })
+      .from(topicLinks)
+      .where(eq(topicLinks.workspaceId, workspaceId));
+    return noLinksUntilMigrated(() => query, []);
   }
 
   async getTestingStyle(userId: string) {
@@ -114,13 +222,14 @@ export class PostgresRepository implements PrepUpRepository {
 
   /**
    * One transaction. Deleting the personal workspace cascades to its topics,
-   * settings and events; the other deletes cover rows the user has in
+   * settings, events and links; the other deletes cover rows the user has in
    * workspaces they don't own (none until collaboration exists).
    */
   async deleteUserData(userId: string): Promise<void> {
     await this.db.transaction(async (tx) => {
       await tx.delete(workspaces).where(and(eq(workspaces.ownerId, userId), eq(workspaces.personal, true)));
       await tx.delete(reviewEvents).where(eq(reviewEvents.userId, userId));
+      await tx.delete(topicLinks).where(eq(topicLinks.createdBy, userId));
       await tx.delete(topicSettings).where(eq(topicSettings.userId, userId));
       await tx.delete(memberships).where(eq(memberships.userId, userId));
       await tx.delete(userSettings).where(eq(userSettings.userId, userId));

@@ -28,7 +28,7 @@ flowchart TB
 | Package | What it holds |
 |---|---|
 | `packages/contracts` | Zod schemas shared by REST and MCP: one definition of "a topic" |
-| `packages/core` | Scoring and fade rules (pure functions), `PrepUpService`, the repository port |
+| `packages/core` | Scoring, fade and link rules (pure functions), `PrepUpService`, the repository port |
 | `packages/db` | Drizzle schema, SQL migrations, the Postgres adapter |
 | `apps/api` | Hono HTTP server: REST routes, the MCP server at `/mcp`, token checks, OAuth consent page |
 | `apps/web` | React + Vite web app: the card deck, progress tracker and card pop-up |
@@ -43,6 +43,8 @@ flowchart TB
 - **Claude can draft your explanation.** After a test, Claude writes the card's explanation in your voice from your answers. It's saved only if you approve it, in the same transaction as the score, and the card shows that Claude drafted it.
 - **Your style, PrepUp's rules.** On the Claude setup page you write how you want to be tested. A short list of fixed rules (one topic at a time, no peeking at your notes, nothing saved without your yes) always comes first, and no style can override them. Both live in `packages/core/src/testing.ts`, which the MCP server and the page both read.
 - **Duplicates merge.** "LangChain", "lang chain" and "Lang-Chain" are one card.
+- **Topics build on topics.** RAG builds on Embeddings and Vector databases. When you add a topic through Claude, `add_topic` returns similar topics already in your deck (a plain text match), Claude proposes links, and nothing is linked until you say yes. The card pop-up shows *Builds on* and *Needed for* as chips. Links can't form a loop (the core rejects one, naming the topics), a topic can build on at most 20 others, and deleting a topic removes its links.
+- **Links never touch scores.** They don't change a score or the fade clock. They do two things: *Prep now* lists a topic's prerequisites ahead of it, and during a test Claude takes a weaker prerequisite first.
 
 ## Limits and safety
 
@@ -67,6 +69,7 @@ All four numbers are environment variables (`.env.example`).
 | Stateless MCP over Streamable HTTP | A fresh MCP server per request, so it runs as a serverless function | No server-pushed notifications (not needed) |
 | One Vercel project, one domain | Web app as static files, the whole API as one function; free on Hobby | Cold starts (~1 s) after idle |
 | PrepUp as OAuth resource server | Never handles passwords; Supabase issues tokens, we verify them via JWKS | Depends on Supabase's OAuth server (beta) |
+| Loops rejected in the core, not the database | The check needs the whole graph, and the message can name the topics; links in one deck are saved one at a time so two can't race past it | A link written straight to the database skips the check (ordering still copes) |
 | RLS on, no policies | Supabase's public Data API can read nothing; the server enforces scoping in every query | Policies are needed if a client ever queries Supabase directly |
 
 ## Running it locally
@@ -104,6 +107,6 @@ Deploying: see [docs/deploy-vercel.md](docs/deploy-vercel.md). Google and GitHub
 - **M3** MCP polish, tested end to end from iPhone
 - **M5** Hardening for other users: rate limits, topic caps, audience check, backups, delete my data
 - **M6** Generalize: Claude setup page with an editable testing style, MIT license, self-host guide
-- **M7** Topic dependencies ("builds on"), mapped by Claude
+- **M7** Topic dependencies: "builds on" links proposed by Claude and confirmed by you, chips in the card pop-up, prerequisites first in Prep now and in tests
 - **M8** Public launch
 - **v2.5** FSRS scheduling in place of the fixed 14 days

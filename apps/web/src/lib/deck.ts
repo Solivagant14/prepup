@@ -4,7 +4,9 @@
  * it slowly pales toward the level below; the countdown bar appears only in
  * the last 3 days before a drop.
  */
-import type { Importance, ReviewEventView, TopicView } from "@prepup/contracts";
+import type { Importance, ReviewEventView, TopicRef, TopicView } from "@prepup/contracts";
+// The link rules are the core's; this file only asks it. The import is pure functions, no server code.
+import { dependentsOf, prerequisitesFirst, type LinkPair } from "@prepup/core/links";
 
 export const LEVELS = ["Shaky", "Learning", "Getting there", "Confident", "Can explain"] as const;
 export const RAMP = ["#EEF0FF", "#C9CEFC", "#A5ACF8", "#4F46E5", "#312E81"] as const;
@@ -65,7 +67,7 @@ export type Tab = "all" | "prep" | "fading_week" | "confident";
 
 export const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "all", label: "All", hint: "Every topic, most urgent first. The darker your deck, the more you know." },
-  { id: "prep", label: "Prep now", hint: "Your weakest topics (score 1–2), most important first." },
+  { id: "prep", label: "Prep now", hint: "Your weakest topics (score 1–2), most important first. What a topic builds on comes before it." },
   { id: "fading_week", label: "Fading this week", hint: "Drops a level within 7 days unless Claude tests you on it." },
   { id: "confident", label: "Confident", hint: "Topics at 4 or 5." },
 ];
@@ -78,6 +80,48 @@ const MATCH: Record<Tab, (t: TopicView) => boolean> = {
 };
 
 export const matches = (tab: Tab, t: TopicView) => MATCH[tab](t);
+
+/** Every "builds on" link in the deck, read off the topics themselves. */
+export const linkPairs = (topics: TopicView[]): LinkPair[] =>
+  topics.flatMap((t) => t.buildsOn.map((p) => ({ topicId: t.id, buildsOnId: p.id })));
+
+/** The cards a tab shows, in order. Prep now puts prerequisites ahead of what builds on them, as the server does. */
+export function shownIn(tab: Tab, topics: TopicView[]): TopicView[] {
+  const shown = topics.filter(MATCH[tab]);
+  return tab === "prep" ? prerequisitesFirst(shown, linkPairs(topics)) : shown;
+}
+
+export interface PrerequisiteOption extends TopicRef {
+  /** Why it can't be picked, or null when it can. */
+  blocked: string | null;
+}
+
+const plain = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
+/**
+ * What the "Add prerequisite" search offers for a card: the user's other
+ * topics matching what they typed, minus the ones already linked. Topics that
+ * build on this card are shown but blocked, since linking back would make a
+ * loop (the server refuses those too).
+ */
+export function prerequisiteOptions(topic: TopicView, topics: TopicView[], query: string, limit = 6) {
+  const linked = new Set(topic.buildsOn.map((p) => p.id));
+  const wouldLoop = dependentsOf(linkPairs(topics), topic.id);
+  const q = plain(query);
+  const matching = topics
+    .filter((t) => t.id !== topic.id && !linked.has(t.id) && plain(t.term).includes(q))
+    .sort((a, b) => Number(wouldLoop.has(a.id)) - Number(wouldLoop.has(b.id)) || a.term.localeCompare(b.term));
+  return {
+    options: matching.slice(0, limit).map(
+      (t): PrerequisiteOption => ({
+        id: t.id,
+        term: t.term,
+        blocked: wouldLoop.has(t.id) ? `builds on ${topic.term}` : null,
+      }),
+    ),
+    more: Math.max(0, matching.length - limit),
+  };
+}
 
 export interface Summary {
   total: number;

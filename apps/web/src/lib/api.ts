@@ -68,6 +68,11 @@ export function createApi(getToken: TokenSource, mode: AppConfig["authMode"]) {
       call<TopicView>(`/api/topics/${id}`, { method: "PATCH", body }),
     setScore: (id: string, score: number) => call<TopicView>(`/api/topics/${id}/score`, { method: "PUT", body: { score } }),
     deleteTopic: (id: string) => call<{ deleted: { term: string } }>(`/api/topics/${id}`, { method: "DELETE" }),
+    /** "This topic builds on that one." Answers with the topic as it now stands. */
+    linkTopic: (id: string, buildsOnId: string) =>
+      call<TopicView>(`/api/topics/${id}/links`, { method: "POST", body: { buildsOnId } }),
+    unlinkTopic: (id: string, buildsOnId: string) =>
+      call<TopicView>(`/api/topics/${id}/links/${buildsOnId}`, { method: "DELETE" }),
     connector: () => call<ConnectorInfo>("/api/connector"),
     saveTestingStyle: (testingStyle: string) =>
       call<UserSettingsView>("/api/settings", { method: "PUT", body: { testingStyle } }),
