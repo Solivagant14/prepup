@@ -65,10 +65,11 @@ export function cardLook(t: Pick<TopicView, "score" | "daysUntilDrop" | "fadingS
 
 export type Tab = "all" | "prep" | "fading_week" | "confident";
 
-export const TABS: { id: Tab; label: string; hint: string }[] = [
+/** `short` is the label on a phone, where four full labels don't fit on one line. */
+export const TABS: { id: Tab; label: string; short?: string; hint: string }[] = [
   { id: "all", label: "All", hint: "Every topic, most urgent first. The darker your deck, the more you know." },
   { id: "prep", label: "Prep now", hint: "Your weakest topics (score 1–2), most important first. What a topic builds on comes before it." },
-  { id: "fading_week", label: "Fading this week", hint: "Drops a level within 7 days unless Claude tests you on it." },
+  { id: "fading_week", label: "Fading this week", short: "Fading", hint: "Drops a level within 7 days unless Claude tests you on it." },
   { id: "confident", label: "Confident", hint: "Topics at 4 or 5." },
 ];
 
@@ -172,4 +173,31 @@ export function eventLabel(e: Pick<ReviewEventView, "kind" | "source">): string 
   if (e.kind === "claude_test") return "Claude test";
   if (e.kind === "manual_edit") return "Manual edit";
   return e.source === "mcp" ? "Explanation drafted by Claude" : "Explanation edited";
+}
+
+export type StartStepId = "add" | "connect" | "test";
+
+/** What a newcomer says to Claude for their first test. */
+export const FIRST_TEST_PROMPT = "Test me on my PrepUp topics";
+
+/**
+ * The three steps to a first test, or null once Claude has tested anything:
+ * from then on the person knows the loop. Adding a term is the only step the
+ * deck can see for itself; a first test completes the other two together.
+ */
+export function startSteps(topics: Pick<TopicView, "lastTestedAt">[]): { id: StartStepId; done: boolean }[] | null {
+  if (topics.some((t) => t.lastTestedAt !== null)) return null;
+  return [
+    { id: "add", done: topics.length > 0 },
+    { id: "connect", done: false },
+    { id: "test", done: false },
+  ];
+}
+
+/** The flags worth a line on a card. Medium importance is the default, so it isn't one. */
+export function cardFlags(t: Pick<TopicView, "importance" | "fadingSoon" | "daysUntilDrop">): { importance: string | null; fade: string | null } {
+  return {
+    importance: t.importance === "medium" ? null : t.importance === "high" ? "High importance" : "Low importance",
+    fade: t.fadingSoon && t.daysUntilDrop !== null ? `fades in ${t.daysUntilDrop}d` : null,
+  };
 }
