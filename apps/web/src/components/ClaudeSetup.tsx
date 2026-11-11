@@ -1,12 +1,14 @@
 /**
  * The Claude side of PrepUp: how to connect, how you want to be tested, the
  * rules no style can change, and what Claude can do. Everything listed here
- * comes from the server's own definitions.
+ * comes from the server's own definitions. The two things to do come first,
+ * in everyday words; the exact text Claude receives is one tap away.
  */
 import { TESTING_STYLE_MAX } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { Api, ConnectorInfo } from "../lib/api.js";
+import { FIRST_TEST_PROMPT } from "../lib/deck.js";
 
 export function ClaudeSetup({ api }: { api: Api }) {
   const info = useQuery({ queryKey: ["connector"], queryFn: api.connector });
@@ -26,6 +28,7 @@ export function ClaudeSetup({ api }: { api: Api }) {
         <>
           <Connect url={info.data.url} />
           <TestingStyle api={api} info={info.data} />
+          <Rules info={info.data} />
           <Tools info={info.data} />
         </>
       )}
@@ -66,22 +69,40 @@ function Connect({ url }: { url: string }) {
         <li>
           Start a new chat and say <q>check my PrepUp connection</q>. Claude answers with your topic count.
         </li>
+        <li>
+          For your first test, say <q>{FIRST_TEST_PROMPT}</q>.
+        </li>
       </ol>
       <p className="note">Add it once on the web or desktop app. It then works in Claude on your phone too.</p>
     </section>
   );
 }
 
+/**
+ * A style being written but not yet saved. Kept outside the component so a
+ * look at another screen and back doesn't throw the typing away.
+ */
+let unsavedStyle: string | null = null;
+
 function TestingStyle({ api, info }: { api: Api; info: ConnectorInfo }) {
   const qc = useQueryClient();
   const saved = info.settings.testingStyle;
-  const [text, setText] = useState(saved);
+  const [text, setTextState] = useState(unsavedStyle ?? saved);
   const [justSaved, setJustSaved] = useState(false);
-  useEffect(() => setText(saved), [saved]);
+  const setText = (next: string) => {
+    unsavedStyle = next.trim() === saved ? null : next;
+    setTextState(next);
+  };
+  // When the saved style changes underneath (saved here, or on another device), show it, unless there's typing to keep.
+  useEffect(() => {
+    if (unsavedStyle === null) setTextState(saved);
+  }, [saved]);
 
   const save = useMutation({
     mutationFn: () => api.saveTestingStyle(text),
     onSuccess: (settings) => {
+      unsavedStyle = null;
+      setTextState(settings.testingStyle);
       qc.setQueryData<ConnectorInfo>(["connector"], (old) => (old ? { ...old, settings } : old));
       setJustSaved(true);
     },
@@ -158,19 +179,38 @@ function TestingStyle({ api, info }: { api: Api; info: ConnectorInfo }) {
           ? (save.error as Error).message
           : justSaved && !dirty
             ? "Saved. New chats use it straight away. In a chat that's already open, ask Claude to check PrepUp first."
-            : ""}
+            : dirty
+              ? "Not saved yet."
+              : ""}
       </p>
 
-      <h3>Rules that always apply</h3>
-      <p className="panel-lead">Claude gets these word for word. They keep a score meaning the same thing for everyone, so your style can't change them.</p>
-      <ol className="rules">
+    </section>
+  );
+}
+
+function Rules({ info }: { info: ConnectorInfo }) {
+  return (
+    <section className="panel" aria-labelledby="rules-title">
+      <h2 id="rules-title">What never changes</h2>
+      <p className="panel-lead">
+        However you ask to be tested, these hold. They keep a score meaning the same thing for everyone.
+      </p>
+      <ul className="rules">
         {info.fixedRules.map((r) => (
           <li key={r.id}>
-            <span>{r.rule}</span>
+            <span>{r.title}</span>
             <span className="why">{r.why}</span>
           </li>
         ))}
-      </ol>
+      </ul>
+      <details className="more">
+        <summary>Show the exact wording Claude gets</summary>
+        <ol className="exact">
+          {info.fixedRules.map((r) => (
+            <li key={r.id}>{r.rule}</li>
+          ))}
+        </ol>
+      </details>
     </section>
   );
 }
@@ -178,33 +218,56 @@ function TestingStyle({ api, info }: { api: Api; info: ConnectorInfo }) {
 function Tools({ info }: { info: ConnectorInfo }) {
   return (
     <section className="panel" aria-labelledby="tools-title">
-      <h2 id="tools-title">3 · What Claude can do</h2>
+      <h2 id="tools-title">What Claude can do</h2>
       <p className="panel-lead">
-        The connector gives Claude these {info.tools.length} tools. It can link topics to what they build on, after you say yes. It can't delete topics or your data; that only happens here.
+        Once connected, Claude can do these {info.tools.length} things in your deck. It can't delete topics or your
+        data; that only happens here.
       </p>
-      <ul className="tools">
+      <ul className="can-do">
         {info.tools.map((t) => (
           <li key={t.name}>
-            <div className="tool-head">
-              <code>{t.name}</code>
-              <span className={`badge${t.readOnly ? "" : " writes"}`}>{t.readOnly ? "reads" : "writes"}</span>
-            </div>
-            <p>{t.description}</p>
+            <span>{t.title}</span>
+            <span className={`badge${t.readOnly ? "" : " writes"}`}>{t.readOnly ? "reads" : "changes your deck"}</span>
           </li>
         ))}
       </ul>
+      <p className="note">Anything that changes your deck happens only after you say yes in the chat.</p>
+
       <h3>Shortcuts</h3>
       <p className="panel-lead">Ready-made prompts you can pick from Claude's menu for this connector.</p>
-      <ul className="tools">
+      <ul className="can-do">
         {info.prompts.map((p) => (
           <li key={p.name}>
-            <div className="tool-head">
-              <code>{p.name}</code>
-            </div>
-            <p>{p.description}</p>
+            <span>
+              {p.title} <span className="muted">· {p.description}</span>
+            </span>
           </li>
         ))}
       </ul>
+
+      <details className="more">
+        <summary>Show the technical details</summary>
+        <ul className="tools">
+          {info.tools.map((t) => (
+            <li key={t.name}>
+              <div className="tool-head">
+                <code>{t.name}</code>
+                <span className={`badge${t.readOnly ? "" : " writes"}`}>{t.readOnly ? "reads" : "writes"}</span>
+              </div>
+              <p>{t.description}</p>
+            </li>
+          ))}
+          {info.prompts.map((p) => (
+            <li key={p.name}>
+              <div className="tool-head">
+                <code>{p.name}</code>
+                <span className="badge">prompt</span>
+              </div>
+              <p>{p.description}</p>
+            </li>
+          ))}
+        </ul>
+      </details>
     </section>
   );
 }

@@ -11,6 +11,8 @@
 
 export interface FixedRule {
   id: string;
+  /** Shown on the settings page: the rule in everyday words, with no tool names. */
+  title: string;
   /** The instruction Claude gets, word for word. */
   rule: string;
   /** Shown on the settings page: why users can't change it. */
@@ -20,46 +22,55 @@ export interface FixedRule {
 export const FIXED_RULES: FixedRule[] = [
   {
     id: "pick",
+    title: "Claude picks the topics, unless you name them",
     rule: 'Pick topics with list_topics (filter "fading_week" or "prep") unless the user names topics.',
     why: "Tests go where they help most: what's weak or about to fade.",
   },
   {
     id: "prerequisites-first",
+    title: "What a topic builds on is tested first",
     rule: "If a topic is weak and something it builds on is weaker, test that prerequisite first. list_topics shows what each topic builds on; search_topics finds a prerequisite's score if it isn't in your list.",
     why: "A topic is hard to explain while what it rests on is still shaky.",
   },
   {
     id: "one-at-a-time",
+    title: "One topic at a time",
     rule: "Test one topic at a time and finish it before starting the next.",
     why: "Each score is about one topic.",
   },
   {
     id: "no-peeking",
+    title: "Claude doesn't show your saved explanation before you answer",
     rule: "Never reveal the user's saved explanation before they answer. Call get_topic only after they have answered.",
     why: "Seeing your own notes first would make the test meaningless.",
   },
   {
     id: "score",
+    title: "Short feedback, then a suggested score",
     rule: "After their answer, give short feedback (what was right, what was missing) and suggest a score from 1 to 5 with a one-line reason. 1-4 is how well they understand it; suggest 5 only if they explained it clearly in their own words.",
     why: "A 5 means the same thing for everyone: you can explain it.",
   },
   {
     id: "draft",
+    title: "Claude drafts your explanation from what you said",
     rule: 'Draft their explanation for the card: 2-4 sentences in their voice ("RAG is when I..."), built from their answers plus any corrections they accepted. Keep the correct points from the saved one. Don\'t add things they didn\'t say or agree to.',
     why: "The card should hold your understanding, not Claude's.",
   },
   {
     id: "confirm",
+    title: "Claude shows the score and the draft, then waits for you",
     rule: "Show the score and the draft together and wait for the user to confirm or change either. They can also keep their old explanation.",
     why: "You have the final say on your own scores.",
   },
   {
     id: "record",
+    title: "Saving happens only after you confirm",
     rule: "Call record_review with the confirmed score, and the explanation only if they approved it. Never call it before they confirm.",
     why: "Nothing is saved without your yes.",
   },
   {
     id: "link",
+    title: "Links are proposed, never made for you",
     rule: 'When the user adds a topic, look at the similar topics add_topic returns, and at their deck, for what the new topic builds on. Propose each link in one line ("RAG builds on Embeddings. Link them?") and call link_topics only after they say yes.',
     why: "Nothing is linked without your yes, and links never change a score.",
   },

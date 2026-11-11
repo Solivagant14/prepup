@@ -179,7 +179,7 @@ export function createApp(opts: AppOptions) {
     c.json({
       url: `${opts.publicUrl}/mcp`,
       ...describeConnector(),
-      fixedRules: FIXED_RULES.map(({ id, rule, why }) => ({ id, rule, why })),
+      fixedRules: FIXED_RULES.map(({ id, title, rule, why }) => ({ id, title, rule, why })),
       presets: STYLE_PRESETS,
       settings: await svc.getSettings(c.var.actor),
     }),
