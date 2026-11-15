@@ -196,7 +196,7 @@ export function Deck({ api }: { api: Api }) {
       {view === "graph" && (
         <p className="tab-hint view-hint">
           {linkCount === 0
-            ? "No links yet. Open a card and add what it builds on, or ask Claude to link your topics."
+            ? "No links yet. Open a card and add what it builds on, or ask your assistant to link your topics."
             : "Arrows run from a topic to what builds on it, so each path reads left to right."}{" "}
           Drag to move, pinch or Ctrl + scroll to zoom, tap a topic to open it.
         </p>

@@ -6,15 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import type { HostStatusView } from "@prepup/contracts";
 import { loadHostStatus } from "../lib/api.js";
 import { databaseRoom, formatUsd, plural, supportLabel } from "../lib/costs.js";
-import { PATHS } from "../lib/route.js";
-import { HostLinks } from "./HostLinks.js";
-import { Link } from "./Link.js";
 
-/** `standalone` is the signed-out view: with no frame around it, the page brings its own top bar. */
-export function Costs({ standalone = false }: { standalone?: boolean }) {
+export function Costs() {
   const status = useQuery({ queryKey: ["host-status"], queryFn: loadHostStatus });
 
-  const page = (
+  return (
     <div className="page setup">
       <div className="setup-head">
         <h1>What PrepUp costs</h1>
@@ -37,25 +33,8 @@ export function Costs({ standalone = false }: { standalone?: boolean }) {
               stays in your own database.
             </p>
           </section>
-          {standalone && <HostLinks links={status.data} showCosts={false} />}
         </>
       )}
-    </div>
-  );
-  if (!standalone) return page;
-  return (
-    <div className="app">
-      <header className="appbar">
-        <div className="appbar-in">
-          <Link to={PATHS.deck} className="brand">
-            PrepUp
-          </Link>
-          <Link to={PATHS.deck} className="btn appbar-end">
-            Sign in
-          </Link>
-        </div>
-      </header>
-      <main>{page}</main>
     </div>
   );
 }
@@ -74,7 +53,7 @@ function Running({ status }: { status: HostStatusView }) {
           {free
             ? "This copy runs on free hosting plans."
             : "Paid by the person who runs this copy. Nobody is charged for using it."}{" "}
-          There is no AI bill: tests run in your own Claude app, on your own plan.
+          There is no AI bill: tests run in your own AI app, on your own plan.
         </p>
       </div>
       {status.supportUrl && (
@@ -147,7 +126,7 @@ function Limits({ status }: { status: HostStatusView }) {
         {requestsPerMinute !== null && requestsPerDay !== null && (
           <li>
             <strong>{plural(requestsPerMinute, "request", "requests")} a minute</strong> and{" "}
-            <strong>{requestsPerDay.toLocaleString("en-US")} a day</strong>, counting the web app and Claude together.
+            <strong>{requestsPerDay.toLocaleString("en-US")} a day</strong>, counting the web app and your assistant together.
             A normal test session uses a few dozen.
           </li>
         )}

@@ -150,7 +150,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
       setRemoved(null);
       refresh();
     },
-    // The deck may have changed elsewhere (say, Claude linked something): reload it so the options are right.
+    // The deck may have changed elsewhere (say, an assistant linked something): reload it so the options are right.
     onError: (e: Error) => {
       setLinkError(e.message);
       refresh();
@@ -219,13 +219,13 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
       await navigator.clipboard.writeText(testPrompt(topic.term));
       setCopied(true);
     } catch {
-      setError("Couldn't copy. Ask Claude: " + testPrompt(topic.term));
+      setError("Couldn't copy. Ask your assistant: " + testPrompt(topic.term));
     }
   };
 
   const look = cardLook(topic);
   const fresh = freshnessText(topic);
-  const lastTested = topic.lastTestedAt ? `last tested ${daysAgo(topic.lastTestedAt)}` : "never tested by Claude";
+  const lastTested = topic.lastTestedAt ? `last tested ${daysAgo(topic.lastTestedAt)}` : "never tested";
 
   return (
     <dialog
@@ -297,7 +297,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
               <span style={{ width: `${Math.round(look.countdown * 100)}%` }} />
             </div>
           )}
-          <span className="small">Only a test with Claude resets the 14-day clock. The countdown starts 3 days before a drop.</span>
+          <span className="small">Only a test with your assistant resets the 14-day clock. The countdown starts 3 days before a drop.</span>
         </div>
 
         <div className="field">
@@ -533,7 +533,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
           </div>
         ) : (
           <button type="button" className="btn primary wide" onClick={() => void copy()}>
-            {copied ? "Copied · paste it in Claude" : "Copy test prompt"}
+            {copied ? "Copied · paste it to your assistant" : "Copy test prompt"}
           </button>
         )}
       </footer>

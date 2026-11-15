@@ -10,8 +10,8 @@ import { dependentsOf, prerequisitesFirst, type LinkPair } from "@prepup/core/li
 
 export const LEVELS = ["Shaky", "Learning", "Getting there", "Confident", "Can explain"] as const;
 export const RAMP = ["#EEF0FF", "#C9CEFC", "#A5ACF8", "#4F46E5", "#312E81"] as const;
-const FADE_DAYS = 14;
-const COUNTDOWN_DAYS = 3;
+export const FADE_DAYS = 14;
+export const COUNTDOWN_DAYS = 3;
 
 const hex = (h: string) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16)) as [number, number, number];
 
@@ -69,7 +69,7 @@ export type Tab = "all" | "prep" | "fading_week" | "confident";
 export const TABS: { id: Tab; label: string; short?: string; hint: string }[] = [
   { id: "all", label: "All", hint: "Every topic, most urgent first. The darker your deck, the more you know." },
   { id: "prep", label: "Prep now", hint: "Your weakest topics (score 1–2), most important first. What a topic builds on comes before it." },
-  { id: "fading_week", label: "Fading this week", short: "Fading", hint: "Drops a level within 7 days unless Claude tests you on it." },
+  { id: "fading_week", label: "Fading this week", short: "Fading", hint: "Drops a level within 7 days unless you're tested on it." },
   { id: "confident", label: "Confident", hint: "Topics at 4 or 5." },
 ];
 
@@ -162,26 +162,26 @@ export const testPrompt = (term: string) =>
 
 export const IMPORTANCES: Importance[] = ["high", "medium", "low"];
 
-/** Says who wrote the current explanation, so a Claude-curated one is never mistaken for your own typing. */
+/** Says who wrote the current explanation, so one an assistant drafted is never mistaken for your own typing. */
 export function explanationNote(t: Pick<TopicView, "explanationBy" | "explanationUpdatedAt">, now = Date.now()): string | null {
   if (!t.explanationBy || !t.explanationUpdatedAt) return null;
   const when = daysAgo(t.explanationUpdatedAt, now);
-  return t.explanationBy === "claude" ? `Drafted by Claude from your test · ${when}` : `Edited by you · ${when}`;
+  return t.explanationBy === "claude" ? `Drafted by your assistant from your test · ${when}` : `Edited by you · ${when}`;
 }
 
 export function eventLabel(e: Pick<ReviewEventView, "kind" | "source">): string {
-  if (e.kind === "claude_test") return "Claude test";
+  if (e.kind === "claude_test") return "Test";
   if (e.kind === "manual_edit") return "Manual edit";
-  return e.source === "mcp" ? "Explanation drafted by Claude" : "Explanation edited";
+  return e.source === "mcp" ? "Explanation drafted by your assistant" : "Explanation edited";
 }
 
 export type StartStepId = "add" | "connect" | "test";
 
-/** What a newcomer says to Claude for their first test. */
+/** What a newcomer says to their assistant for their first test. */
 export const FIRST_TEST_PROMPT = "Test me on my PrepUp topics";
 
 /**
- * The three steps to a first test, or null once Claude has tested anything:
+ * The three steps to a first test, or null once an assistant has tested anything:
  * from then on the person knows the loop. Adding a term is the only step the
  * deck can see for itself; a first test completes the other two together.
  */

@@ -299,11 +299,32 @@ describe("MCP", () => {
     expect(page.prompts.map((p) => p.name).sort()).toEqual(prompts.map((p) => p.name).sort());
     expect(page.fixedRules.map((r) => r.id)).toEqual(FIXED_RULES.map((r) => r.id));
     expect(page.fixedRules).toHaveLength(9);
-    // The page gets each rule twice: in everyday words, and exactly as Claude is told it.
+    // The page gets each rule twice: in everyday words, and exactly as the assistant is told it.
     expect(page.fixedRules.map((r) => [r.title, r.rule])).toEqual(FIXED_RULES.map((r) => [r.title, r.rule]));
     expect(page.presets.map((p) => p.id)).toEqual(["interviewer", "tutor", "drill"]);
     expect(page.settings.preset).toBe("interviewer");
     expect((await app.request("/api/connector")).status).toBe(401);
+  });
+
+  it("gives the guide the connector's address, actions and rules without sign-in, and nothing personal", async () => {
+    await app.request("/api/settings", as(USER, { method: "PUT", body: JSON.stringify({ testingStyle: "Only mine." }) }));
+    const res = await app.request("/connector");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+    const text = await res.text();
+    expect(text).not.toContain("Only mine.");
+    const info = JSON.parse(text) as {
+      url: string;
+      tools: Array<{ name: string; description: string }>;
+      prompts: Array<{ name: string }>;
+      fixedRules: Array<{ id: string; rule: string; promise: string | null }>;
+    };
+    expect(Object.keys(info).sort()).toEqual(["fixedRules", "prompts", "tools", "url"]);
+    expect(info.url).toBe(`${PUBLIC_URL}/mcp`);
+    const live = (await mcp(USER, "tools/list")).result.tools as Array<{ name: string; description: string }>;
+    expect(info.tools.map((t) => [t.name, t.description]).sort()).toEqual(live.map((t) => [t.name, t.description]).sort());
+    expect(info.fixedRules.map((r) => r.rule)).toEqual(FIXED_RULES.map((r) => r.rule));
+    expect(info.fixedRules.filter((r) => r.promise).map((r) => r.id)).toEqual(["no-peeking", "score", "record", "link"]);
   });
 
   it("rejects a bad testing style with a readable message", async () => {

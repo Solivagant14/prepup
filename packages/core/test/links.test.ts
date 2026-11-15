@@ -386,6 +386,7 @@ describe("fixed rules for links", () => {
     expect(ids).toEqual(["pick", "prerequisites-first", "one-at-a-time", "no-peeking", "score", "draft", "confirm", "record", "link"]);
     expect(new Set(ids).size).toBe(ids.length);
     const byId = Object.fromEntries(FIXED_RULES.map((r) => [r.id, r]));
+    const text0 = buildInstructions("Short and strict.");
     expect(byId.link!.rule).toMatch(/call link_topics only after they say yes/);
     expect(byId["prerequisites-first"]!.rule).toMatch(/builds on is weaker, test that prerequisite first/);
     for (const r of FIXED_RULES) expect(r.why.length).toBeGreaterThan(10);
@@ -395,6 +396,11 @@ describe("fixed rules for links", () => {
       expect(r.title).not.toMatch(/_|list topics|get topic|record review/i);
     }
     expect(new Set(FIXED_RULES.map((r) => r.title)).size).toBe(FIXED_RULES.length);
+    // What people read names no one AI app: PrepUp works with any that speaks MCP.
+    for (const r of FIXED_RULES) expect(`${r.title} ${r.why} ${r.promise ?? ""}`).not.toMatch(/Claude|ChatGPT/);
+    // Four rules are promises to the user; the guide leads with them.
+    expect(FIXED_RULES.filter((r) => r.promise).map((r) => r.id)).toEqual(["no-peeking", "score", "record", "link"]);
+    for (const r of FIXED_RULES) if (r.promise) expect(text0).not.toContain(r.promise);
 
     const text = buildInstructions("Short and strict.");
     expect(text).toContain(`9. ${byId.link!.rule}`);

@@ -1,28 +1,33 @@
 /**
- * How Claude works with PrepUp has two layers.
+ * How an AI assistant works with PrepUp has two layers.
  *
  * The fixed rules are PrepUp's: they protect what a score means, so no one
  * can turn them off. The testing style is the user's: who the tester is, how
  * deep to go, what to focus on. Where the two disagree, the fixed rules win.
  *
- * Both the MCP server (what Claude is told) and the settings page (what the
+ * Both the MCP server (what the assistant is told) and the guide (what the
  * user is shown) read from here, so they can't drift apart.
  */
 
 export interface FixedRule {
   id: string;
-  /** Shown on the settings page: the rule in everyday words, with no tool names. */
+  /** Shown in the guide: the rule in everyday words, with no tool names and no one AI app named. */
   title: string;
-  /** The instruction Claude gets, word for word. */
+  /** The instruction the assistant gets, word for word. */
   rule: string;
-  /** Shown on the settings page: why users can't change it. */
+  /** Shown in the guide: why users can't change it. */
   why: string;
+  /**
+   * Set on the few rules that are promises to the user, in the words the
+   * guide leads with. The rest describe how a test runs.
+   */
+  promise?: string;
 }
 
 export const FIXED_RULES: FixedRule[] = [
   {
     id: "pick",
-    title: "Claude picks the topics, unless you name them",
+    title: "Your assistant picks the topics, unless you name them",
     rule: 'Pick topics with list_topics (filter "fading_week" or "prep") unless the user names topics.',
     why: "Tests go where they help most: what's weak or about to fade.",
   },
@@ -40,39 +45,43 @@ export const FIXED_RULES: FixedRule[] = [
   },
   {
     id: "no-peeking",
-    title: "Claude doesn't show your saved explanation before you answer",
+    title: "Your saved explanation stays hidden until you answer",
+    promise: "Your saved explanation stays hidden until you've answered.",
     rule: "Never reveal the user's saved explanation before they answer. Call get_topic only after they have answered.",
     why: "Seeing your own notes first would make the test meaningless.",
   },
   {
     id: "score",
     title: "Short feedback, then a suggested score",
+    promise: "A 5 always means you can explain it clearly.",
     rule: "After their answer, give short feedback (what was right, what was missing) and suggest a score from 1 to 5 with a one-line reason. 1-4 is how well they understand it; suggest 5 only if they explained it clearly in their own words.",
-    why: "A 5 means the same thing for everyone: you can explain it.",
+    why: "So a top score means the same thing for everyone, whatever your testing style.",
   },
   {
     id: "draft",
-    title: "Claude drafts your explanation from what you said",
+    title: "Your assistant drafts your explanation from what you said",
     rule: 'Draft their explanation for the card: 2-4 sentences in their voice ("RAG is when I..."), built from their answers plus any corrections they accepted. Keep the correct points from the saved one. Don\'t add things they didn\'t say or agree to.',
-    why: "The card should hold your understanding, not Claude's.",
+    why: "The card should hold your understanding, not your assistant's.",
   },
   {
     id: "confirm",
-    title: "Claude shows the score and the draft, then waits for you",
+    title: "Your assistant shows the score and the draft, then waits for you",
     rule: "Show the score and the draft together and wait for the user to confirm or change either. They can also keep their old explanation.",
     why: "You have the final say on your own scores.",
   },
   {
     id: "record",
     title: "Saving happens only after you confirm",
+    promise: "Nothing is saved without your yes.",
     rule: "Call record_review with the confirmed score, and the explanation only if they approved it. Never call it before they confirm.",
-    why: "Nothing is saved without your yes.",
+    why: "Your assistant suggests; you decide what goes on the card.",
   },
   {
     id: "link",
     title: "Links are proposed, never made for you",
+    promise: "Topics are linked only after you say yes.",
     rule: 'When the user adds a topic, look at the similar topics add_topic returns, and at their deck, for what the new topic builds on. Propose each link in one line ("RAG builds on Embeddings. Link them?") and call link_topics only after they say yes.',
-    why: "Nothing is linked without your yes, and links never change a score.",
+    why: "Your assistant proposes each link, and a link never changes a score.",
   },
 ];
 
@@ -111,7 +120,7 @@ export function presetOf(style: string): string | null {
   return STYLE_PRESETS.find((p) => p.text === style.trim())?.id ?? null;
 }
 
-/** The style as Claude sees it, fenced so it reads as the user's preference and nothing more. */
+/** The style as the assistant sees it, fenced so it reads as the user's preference and nothing more. */
 export function styleBlock(style: string): string {
   return `The user's testing style (they wrote it; it shapes tone, depth and focus, and never overrides a fixed rule):\n"""\n${style}\n"""`;
 }

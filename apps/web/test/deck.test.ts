@@ -93,7 +93,7 @@ describe("explanation authorship", () => {
   const now = Date.parse("2026-11-10T12:00:00Z");
   it("says who wrote the explanation", () => {
     expect(explanationNote({ explanationBy: "claude", explanationUpdatedAt: "2026-11-08T09:00:00Z" }, now)).toBe(
-      "Drafted by Claude from your test · 2 days ago",
+      "Drafted by your assistant from your test · 2 days ago",
     );
     expect(explanationNote({ explanationBy: "you", explanationUpdatedAt: "2026-11-10T09:00:00Z" }, now)).toBe(
       "Edited by you · today",
@@ -102,9 +102,9 @@ describe("explanation authorship", () => {
   });
 
   it("labels history entries by source", () => {
-    expect(eventLabel({ kind: "explanation", source: "mcp" })).toBe("Explanation drafted by Claude");
+    expect(eventLabel({ kind: "explanation", source: "mcp" })).toBe("Explanation drafted by your assistant");
     expect(eventLabel({ kind: "explanation", source: "web" })).toBe("Explanation edited");
-    expect(eventLabel({ kind: "claude_test", source: "mcp" })).toBe("Claude test");
+    expect(eventLabel({ kind: "claude_test", source: "mcp" })).toBe("Test");
   });
 });
 
@@ -160,7 +160,7 @@ describe("first visit", () => {
     expect(startSteps([topic({})])!.map((s) => s.done)).toEqual([true, false, false]);
   });
 
-  it("goes away once Claude has tested anything, however long ago", () => {
+  it("goes away once an assistant has tested anything, however long ago", () => {
     expect(startSteps([topic({}), topic({ id: "u", lastTestedAt: "2026-01-01T00:00:00Z" })])).toBeNull();
   });
 

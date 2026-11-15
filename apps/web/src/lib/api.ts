@@ -16,12 +16,17 @@ export interface AppConfig {
 /** The two outside links shown at the foot of every screen. */
 export type HostLinkTargets = Pick<AppConfig, "supportUrl" | "sourceUrl">;
 
-/** Everything the "Claude setup" page shows, straight from the server's own definitions. */
+/** What the guide shows about the connector, straight from the server's own definitions. Public. */
 export interface ConnectorInfo {
   url: string;
   tools: Array<{ name: string; title: string; description: string; readOnly: boolean }>;
   prompts: Array<{ name: string; title: string; description: string }>;
-  fixedRules: Array<{ id: string; title: string; rule: string; why: string }>;
+  /** `promise` is set on the few rules the guide leads with. */
+  fixedRules: Array<{ id: string; title: string; rule: string; why: string; promise: string | null }>;
+}
+
+/** The connector details plus what the Settings screen needs: the presets and this person's testing style. */
+export interface TestingSetup extends ConnectorInfo {
   presets: Array<{ id: string; name: string; summary: string; text: string }>;
   settings: UserSettingsView;
 }
@@ -41,6 +46,13 @@ export class ApiError extends Error {
 export async function loadConfig(): Promise<AppConfig> {
   const res = await fetch("/app-config");
   if (!res.ok) throw new ApiError(res.status, "Could not reach PrepUp");
+  return res.json();
+}
+
+/** The connector's address, actions and rules, for the guide. No sign-in needed. */
+export async function loadConnector(): Promise<ConnectorInfo> {
+  const res = await fetch("/connector");
+  if (!res.ok) throw new ApiError(res.status, "Could not load this part of the guide right now");
   return res.json();
 }
 
@@ -87,7 +99,7 @@ export function createApi(getToken: TokenSource, mode: AppConfig["authMode"]) {
       call<TopicView>(`/api/topics/${id}/links`, { method: "POST", body: { buildsOnId } }),
     unlinkTopic: (id: string, buildsOnId: string) =>
       call<TopicView>(`/api/topics/${id}/links/${buildsOnId}`, { method: "DELETE" }),
-    connector: () => call<ConnectorInfo>("/api/connector"),
+    testingSetup: () => call<TestingSetup>("/api/connector"),
     saveTestingStyle: (testingStyle: string) =>
       call<UserSettingsView>("/api/settings", { method: "PUT", body: { testingStyle } }),
     /** Removes everything PrepUp holds for the signed-in user. */

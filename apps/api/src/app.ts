@@ -70,6 +70,19 @@ export function createApp(opts: AppOptions) {
     }),
   );
 
+  // What the guide shows about the connector: its address, what an assistant can
+  // do with it, and the rules it is given. Public, like the guide itself, and
+  // built from the same definitions the MCP server registers.
+  const connectorInfo = () => ({
+    url: `${opts.publicUrl}/mcp`,
+    ...describeConnector(),
+    fixedRules: FIXED_RULES.map(({ id, title, rule, why, promise }) => ({ id, title, rule, why, promise: promise ?? null })),
+  });
+  app.get("/connector", (c) => {
+    c.header("Cache-Control", "public, max-age=300");
+    return c.json(connectorInfo());
+  });
+
   // The public costs page: what this host pays, how full it is, and each person's
   // limits. Totals only. Anyone can call it, so the totals are kept for a few
   // minutes here and by the CDN in front.
@@ -171,18 +184,12 @@ export function createApp(opts: AppOptions) {
     c.json((await svc.unlinkTopics(c.var.actor, uuidParam(c), uuidParam(c, "buildsOnId"))).topic),
   );
 
-  // Personal settings, and everything the "Claude setup" page shows. The tool
-  // list and rules come from the same definitions the MCP server uses.
+  // Personal settings. The Settings screen also needs the presets, and gets the
+  // connector details with them.
   app.get("/api/settings", async (c) => c.json(await svc.getSettings(c.var.actor)));
   app.put("/api/settings", async (c) => c.json(await svc.updateSettings(c.var.actor, await body(c))));
   app.get("/api/connector", async (c) =>
-    c.json({
-      url: `${opts.publicUrl}/mcp`,
-      ...describeConnector(),
-      fixedRules: FIXED_RULES.map(({ id, title, rule, why }) => ({ id, title, rule, why })),
-      presets: STYLE_PRESETS,
-      settings: await svc.getSettings(c.var.actor),
-    }),
+    c.json({ ...connectorInfo(), presets: STYLE_PRESETS, settings: await svc.getSettings(c.var.actor) }),
   );
 
   // "Erase all my data". Web only on purpose: Claude has no tool for it.

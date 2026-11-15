@@ -2,11 +2,11 @@
 import type { OAuthProvider } from "@prepup/contracts";
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
-import { Account } from "./components/Account.js";
 import { Costs } from "./components/Costs.js";
-import { ClaudeSetup } from "./components/ClaudeSetup.js";
 import { Deck } from "./components/Deck.js";
-import { Shell } from "./components/Shell.js";
+import { Guide } from "./components/Guide.js";
+import { Settings } from "./components/Settings.js";
+import { PublicFrame, Shell } from "./components/Shell.js";
 import { SignIn } from "./components/SignIn.js";
 import type { AccountInfo } from "./lib/account.js";
 import { createApi, loadConfig, type Api, type AppConfig, type HostLinkTargets } from "./lib/api.js";
@@ -26,8 +26,8 @@ export function App() {
   if (!config) return null;
   if (config.authMode === "dev") return <Home api={devApi} links={config} account={null} />;
   if (!config.supabaseUrl || !config.supabasePublishableKey) {
-    // The costs page needs no sign-in settings, so it still shows.
-    if (screen === "costs") return <PublicCosts />;
+    // The guide and the costs page need no sign-in settings, so they still show.
+    if (screen === "guide" || screen === "costs") return <PublicPage screen={screen} links={config} />;
     return <p className="auth error">PrepUp isn't configured yet (missing Supabase settings).</p>;
   }
   return (
@@ -62,10 +62,10 @@ function Home({
 
   return (
     <Shell screen={screen} account={account} links={links} {...(onSignOut ? { onSignOut } : {})}>
-      {screen === "claude" ? (
-        <ClaudeSetup api={api} />
-      ) : screen === "account" ? (
-        <Account api={api} account={account} {...(onSignOut ? { onSignOut } : {})} />
+      {screen === "guide" ? (
+        <Guide links={links} />
+      ) : screen === "settings" ? (
+        <Settings api={api} account={account} {...(onSignOut ? { onSignOut } : {})} />
       ) : screen === "costs" ? (
         <Costs />
       ) : (
@@ -75,16 +75,21 @@ function Home({
   );
 }
 
+/** Names the screen in the browser tab. The guide names its own pages, so it is left alone here. */
 function useTitle(screen: keyof typeof TITLES) {
   useEffect(() => {
-    document.title = TITLES[screen];
+    if (screen !== "guide") document.title = TITLES[screen];
   }, [screen]);
 }
 
-/** The costs page is public: signed out, it shows by itself instead of the sign-in screen. */
-function PublicCosts() {
-  useTitle("costs");
-  return <Costs standalone />;
+/** The guide and the costs page are public: signed out, they show in a plain frame instead of the sign-in screen. */
+function PublicPage({ screen, links }: { screen: "guide" | "costs"; links: HostLinkTargets }) {
+  useTitle(screen);
+  return (
+    <PublicFrame screen={screen} links={links}>
+      {screen === "guide" ? <Guide links={links} /> : <Costs />}
+    </PublicFrame>
+  );
 }
 
 function SupabaseApp({
@@ -116,9 +121,12 @@ function SupabaseApp({
     [supabase],
   );
 
-  const onCosts = screenFor(usePath()) === "costs";
+  const screen = screenFor(usePath());
   if (session === undefined) return null;
-  if (!session) return onCosts ? <PublicCosts /> : <SignIn supabase={supabase} providers={providers} links={links} />;
+  if (!session) {
+    if (screen === "guide" || screen === "costs") return <PublicPage screen={screen} links={links} />;
+    return <SignIn supabase={supabase} providers={providers} links={links} />;
+  }
   const account: AccountInfo = {
     email: session.user.email ?? null,
     provider: typeof session.user.app_metadata?.provider === "string" ? session.user.app_metadata.provider : null,

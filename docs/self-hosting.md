@@ -4,7 +4,7 @@ PrepUp is one Vercel project and one Supabase project, both on free plans. About
 
 | Piece | What it does | Free plan limit that matters |
 |---|---|---|
-| Supabase | Postgres, sign-in, and the OAuth server Claude signs in through | 500 MB database; pauses after 7 idle days; no backups |
+| Supabase | Postgres, sign-in, and the OAuth server AI apps sign in through | 500 MB database; pauses after 7 idle days; no backups |
 | Vercel | The web app plus one function for the API and MCP server | 4 hours of CPU a month (roughly 800 ten-topic test sessions a day) |
 
 Use a Supabase project that serves **only** PrepUp. PrepUp accepts any signed-in user of that project.
@@ -15,7 +15,7 @@ Dashboard labels move around; the settings below are what matters.
 
 1. Create a project in the region closest to you. Save the database password.
 2. **Signing keys:** under the JWT settings, switch to asymmetric signing keys (ES256). PrepUp verifies tokens against the project's public keys and never holds a secret.
-3. **OAuth server:** under Authentication, turn on the OAuth 2.1 server and **dynamic client registration** (how Claude registers itself). Set the authorization (consent) path to `/oauth/consent`.
+3. **OAuth server:** under Authentication, turn on the OAuth 2.1 server and **dynamic client registration** (how an AI app such as Claude registers itself). Set the authorization (consent) path to `/oauth/consent`.
 4. **Sign-in:** enable Google by following [social-login.md](social-login.md). For a shared instance, leave **Allow new users to sign up** on.
 5. Note three values: the project URL (`https://<ref>.supabase.co`), the publishable key, and the **transaction pooler** connection string (port 6543).
 
@@ -54,9 +54,9 @@ The public costs page (`/costs`) works with no settings. To make it describe you
 
 The page shows totals for the whole copy: how many people and topics, and the database's size. It never shows anyone's topics.
 
-## 4. Connect Claude
+## 4. Connect an AI app
 
-Open your site, sign in, and go to **Claude setup**. It shows your connector URL and the steps.
+Open your site and go to **Guide › Connect your assistant** (`/guide/connect`). It shows your copy's connector address and the steps for each app. The guide needs no sign-in, so you can send people the link.
 
 ## 5. Before you invite anyone
 

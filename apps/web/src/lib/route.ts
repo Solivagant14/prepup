@@ -1,26 +1,37 @@
 /**
- * Four screens, each with its own address, without a router library: the
- * path picks the screen, and the browser's back button works as usual.
+ * A handful of screens, each with its own address, without a router library:
+ * the path picks the screen, and the browser's back button works as usual.
  */
 import { useSyncExternalStore } from "react";
 
-export type Screen = "deck" | "claude" | "account" | "costs";
+export type Screen = "deck" | "guide" | "settings" | "costs";
 
-export const PATHS: Record<Screen, string> = { deck: "/", claude: "/claude", account: "/account", costs: "/costs" };
+export const PATHS: Record<Screen, string> = { deck: "/", guide: "/guide", settings: "/settings", costs: "/costs" };
 
-/** What the browser tab says on each screen. */
+/** What the browser tab says on each screen. Guide pages name themselves. */
 export const TITLES: Record<Screen, string> = {
   deck: "PrepUp",
-  claude: "Claude setup · PrepUp",
-  account: "Account · PrepUp",
+  guide: "Guide · PrepUp",
+  settings: "Settings · PrepUp",
   costs: "Costs · PrepUp",
 };
 
-/** The screen an address shows, or null for an address PrepUp doesn't have. */
+const clean = (pathname: string) => pathname.replace(/\/+$/, "") || "/";
+
+/** The screen an address shows, or null for an address PrepUp doesn't have. The guide owns everything under /guide. */
 export function screenFor(pathname: string): Screen | null {
-  const clean = pathname.replace(/\/+$/, "") || "/";
-  const found = (Object.keys(PATHS) as Screen[]).find((s) => PATHS[s] === clean);
+  const path = clean(pathname);
+  if (path.startsWith(`${PATHS.guide}/`)) return "guide";
+  const found = (Object.keys(PATHS) as Screen[]).find((s) => PATHS[s] === path);
   return found ?? null;
+}
+
+/** Screens that were renamed. Old links and bookmarks land on what replaced them. */
+const MOVED: Record<string, string> = { "/claude": "/guide/connect", "/account": "/settings" };
+
+/** Where a renamed address leads now, or null for an address that hasn't moved. */
+export function movedPath(pathname: string): string | null {
+  return MOVED[clean(pathname)] ?? null;
 }
 
 /**
@@ -31,12 +42,13 @@ export function screenFor(pathname: string): Screen | null {
 export function legacyPath(hash: string): string | null {
   const match = /^#\/(claude|costs)?$/.exec(hash);
   if (!match) return null;
-  return match[1] ? `/${match[1]}` : "/";
+  const path = match[1] ? `/${match[1]}` : "/";
+  return movedPath(path) ?? path;
 }
 
 /** Call once before the first render, so an old link opens the right screen. */
 export function adoptLegacyAddress(): void {
-  const path = legacyPath(window.location.hash);
+  const path = legacyPath(window.location.hash) ?? movedPath(window.location.pathname);
   if (path) window.history.replaceState(null, "", path);
 }
 

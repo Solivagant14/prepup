@@ -118,7 +118,7 @@ const brief = (t: TopicView) => ({
   buildsOn: t.buildsOn.map((p) => p.term),
 });
 
-const WHO = { you: "the user", claude: "Claude, from an earlier test" } as const;
+const WHO = { you: "the user", claude: "the assistant, from an earlier test" } as const;
 
 async function guard<T>(fn: () => Promise<T>) {
   try {

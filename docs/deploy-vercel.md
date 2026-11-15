@@ -1,6 +1,6 @@
 # Deploy PrepUp on Vercel (free, Hobby plan)
 
-One Vercel project serves everything: the web app, the REST API, the MCP server for Claude and the OAuth consent page. About 20 minutes. Never paste keys into a chat or commit them.
+One Vercel project serves everything: the web app, the REST API, the MCP server AI apps connect to, and the OAuth consent page. About 20 minutes. Never paste keys into a chat or commit them.
 
 Your Supabase project is already set up from M0 (signing keys, OAuth server, dynamic client registration), and the database tables already exist.
 
@@ -73,7 +73,8 @@ DATABASE_URL='postgres://...session-pooler...:5432/postgres' pnpm db:migrate
 
 - Each user gets 120 requests a minute, 5,000 a day and 500 topics. Change them in Vercel with `RATE_LIMIT_PER_MINUTE`, `RATE_LIMIT_PER_DAY` and `MAX_TOPICS_PER_USER`, then redeploy.
 - The request limits need the `rate_limits` table. Until the migration above has run, requests are allowed and the function logs "Rate limit check failed".
-- The Claude setup page and per-user testing styles need the `user_settings` table. Until the migration has run, saving a style fails and Claude uses the default style.
+- Per-user testing styles (Settings) need the `user_settings` table. Until the migration has run, saving a style fails and assistants get the default style.
+- The guide (`/guide`) is public and needs no migration or settings. `/claude` and `/account` are old addresses that now open the connect page and Settings.
 - The costs page (`/costs`) is public and needs no migration. Set `SUPPORT_URL` (your Buy Me a Coffee link, `https://` only) to show a support link on it and at the foot of every screen; set `HOSTING_COST_PER_MONTH` and `DATABASE_LIMIT_MB` when you move to paid plans. Redeploy after changing them.
 - Topic links ("builds on") need the `topic_links` table. Until the migration has run, the deck works and shows no links; adding a link fails, and the function logs "topic_links is missing".
 - Nightly backups are off until you add two secrets: see [backups.md](backups.md).
@@ -83,7 +84,7 @@ DATABASE_URL='postgres://...session-pooler...:5432/postgres' pnpm db:migrate
 | Symptom | Probable cause |
 |---|---|
 | Site says "isn't configured yet" | `SUPABASE_URL` or `SUPABASE_PUBLISHABLE_KEY` missing; redeploy after adding |
-| Claude can't connect | `PUBLIC_URL` doesn't match the real URL, or Supabase's Site URL still points at Fly |
+| An AI app can't connect | `PUBLIC_URL` doesn't match the real URL, or Supabase's Site URL still points at Fly |
 | Every click takes over a second | Function region is far from Supabase (step 2) |
 | Errors mentioning "prepared statement" | `DATABASE_URL` is the session pooler; use the transaction pooler (6543) |
 | Everyone gets 401 after an upgrade | Tokens don't carry `aud: authenticated`; set `AUTH_AUDIENCE` to the value your Supabase project uses |
