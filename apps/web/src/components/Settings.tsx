@@ -1,19 +1,29 @@
 /**
- * Who is signed in, signing out, and erasing your data: the actions that
- * belong to the person, not to the deck, in one place.
+ * Settings: how you want to be tested, who is signed in, and your data. The
+ * things that belong to the person, not to the deck, in one place.
  */
 import type { TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { Api } from "../lib/api.js";
 import { signedInLabel, type AccountInfo } from "../lib/account.js";
+import { TestingStyle } from "./TestingStyle.js";
 
-export function Account({ api, account, onSignOut }: { api: Api; account: AccountInfo | null; onSignOut?: () => void }) {
+export function Settings({ api, account, onSignOut }: { api: Api; account: AccountInfo | null; onSignOut?: () => void }) {
+  const setup = useQuery({ queryKey: ["testing-setup"], queryFn: api.testingSetup });
   return (
     <div className="page setup">
       <div className="setup-head">
-        <h1>Account</h1>
+        <h1>Settings</h1>
       </div>
+
+      {setup.isLoading ? (
+        <p className="muted">Loading…</p>
+      ) : setup.isError || !setup.data ? (
+        <p className="error">{(setup.error as Error | null)?.message ?? "Could not load your testing style"}</p>
+      ) : (
+        <TestingStyle api={api} info={setup.data} />
+      )}
 
       <section className="panel" aria-labelledby="who-title">
         <h2 id="who-title">{signedInLabel(account)}</h2>
@@ -26,7 +36,7 @@ export function Account({ api, account, onSignOut }: { api: Api; account: Accoun
           )}
         </div>
         {account && (
-          <p className="note">Use this same account when you connect Claude, so your tests land in this deck.</p>
+          <p className="note">Use this same account when you connect an AI app, so your tests land in this deck.</p>
         )}
       </section>
 

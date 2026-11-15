@@ -139,12 +139,12 @@ export function consentPage(
   $("deny").addEventListener("click", () => decide(false));
 
   if (!authorizationId) {
-    $("status").textContent = "Open this page from Claude's connector setup.";
+    $("status").textContent = "Open this page from your AI app's connector setup.";
   } else {
     const { data } = await supabase.auth.getSession();
     if (data.session) await showConsent();
     else {
-      $("status").textContent = "Sign in to let Claude use your PrepUp deck.";
+      $("status").textContent = "Sign in to let your AI app use your PrepUp deck.";
       $("signin").hidden = false;
       $("social").hidden = ${providers.length === 0 ? "true" : "false"};
     }

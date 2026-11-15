@@ -45,10 +45,10 @@ export function SignIn({
       <form onSubmit={(e) => void submit("in", e)}>
         <h1>PrepUp</h1>
         <p className="auth-lead">
-          Keep track of what you're learning. Add a term the moment you hear it, let your own Claude test you on it, and
+          Keep track of what you're learning. Add a term the moment you hear it, let your own AI assistant test you on it, and
           watch your deck darken as it sticks.
         </p>
-        <p className="muted auth-hint">Free to use. If you've connected Claude already, sign in with the same account.</p>
+        <p className="muted auth-hint">Free to use. If you've already connected an AI app, sign in with the same account.</p>
         {providers.map((p, i) => (
           <button key={p} type="button" className={`btn social${i === 0 ? " primary" : ""}`} onClick={() => void social(p)}>
             <ProviderIcon provider={p} />
@@ -98,7 +98,7 @@ export function SignIn({
         <p className="error" role="alert">
           {message}
         </p>
-        <HostLinks links={links} />
+        <HostLinks links={links} showGuide />
       </form>
     </main>
   );

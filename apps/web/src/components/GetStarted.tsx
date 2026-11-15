@@ -1,10 +1,10 @@
 /**
  * The first visit: the three steps from an empty deck to a first test. It
- * goes away by itself once Claude has tested something, or when dismissed.
+ * goes away by itself once an assistant has tested something, or when dismissed.
  */
 import { useState } from "react";
 import { FIRST_TEST_PROMPT, type StartStepId } from "../lib/deck.js";
-import { PATHS } from "../lib/route.js";
+import { guidePath } from "../lib/guide.js";
 import { Link } from "./Link.js";
 
 export function GetStarted({ steps, onHide }: { steps: { id: StartStepId; done: boolean }[]; onHide: () => void }) {
@@ -32,7 +32,7 @@ export function GetStarted({ steps, onHide }: { steps: { id: StartStepId; done: 
       <div className="start-head">
         <div>
           <h2 id="start-title">Get started</h2>
-          <p>PrepUp keeps the record. Your own Claude does the testing.</p>
+          <p>PrepUp keeps the record. An AI assistant you already use does the testing.</p>
         </div>
         <button type="button" className="icon-btn" aria-label="Hide these steps" onClick={onHide}>
           <span aria-hidden="true">×</span>
@@ -49,10 +49,10 @@ export function GetStarted({ steps, onHide }: { steps: { id: StartStepId; done: 
         <li className={next === "connect" ? "next" : ""}>
           {mark("connect", 2)}
           <div>
-            <strong>Connect Claude</strong>
+            <strong>Connect your assistant</strong>
             <p>A one-time setup that takes about two minutes.</p>
-            <Link to={PATHS.claude} className={`btn${next === "connect" ? " primary" : ""}`}>
-              Open Claude setup
+            <Link to={guidePath("connect")} className={`btn${next === "connect" ? " primary" : ""}`}>
+              See how to connect
             </Link>
           </div>
         </li>
@@ -60,7 +60,7 @@ export function GetStarted({ steps, onHide }: { steps: { id: StartStepId; done: 
           {mark("test", 3)}
           <div>
             <strong>Take your first test</strong>
-            <p className="keep">In a new Claude chat, say:</p>
+            <p className="keep">In a new chat with your assistant, say:</p>
             <div className="start-say">
               <q>{FIRST_TEST_PROMPT}</q>
               <button type="button" className="btn" onClick={() => void copy()}>

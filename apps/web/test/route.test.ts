@@ -1,26 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { signedInLabel } from "../src/lib/account.js";
-import { legacyPath, PATHS, screenFor, TITLES } from "../src/lib/route.js";
+import { legacyPath, movedPath, PATHS, screenFor, TITLES } from "../src/lib/route.js";
 
 describe("addresses", () => {
   it("gives each screen its own address", () => {
     expect(screenFor("/")).toBe("deck");
-    expect(screenFor("/claude")).toBe("claude");
-    expect(screenFor("/account")).toBe("account");
+    expect(screenFor("/guide")).toBe("guide");
+    expect(screenFor("/settings")).toBe("settings");
     expect(screenFor("/costs")).toBe("costs");
     for (const [screen, path] of Object.entries(PATHS)) expect(screenFor(path)).toBe(screen);
   });
 
+  it("gives the guide every address under /guide", () => {
+    expect(screenFor("/guide/connect")).toBe("guide");
+    expect(screenFor("/guide/no-such-page")).toBe("guide");
+    expect(screenFor("/guidebook")).toBeNull();
+  });
+
   it("forgives a trailing slash and refuses addresses it doesn't have", () => {
-    expect(screenFor("/claude/")).toBe("claude");
+    expect(screenFor("/settings/")).toBe("settings");
     expect(screenFor("")).toBe("deck");
-    expect(screenFor("/settings")).toBeNull();
-    expect(screenFor("/claude/extra")).toBeNull();
-    expect(screenFor("/Claude")).toBeNull();
+    expect(screenFor("/claude")).toBeNull();
+    expect(screenFor("/settings/extra")).toBeNull();
+    expect(screenFor("/Settings")).toBeNull();
+  });
+
+  it("sends renamed screens to what replaced them", () => {
+    expect(movedPath("/claude")).toBe("/guide/connect");
+    expect(movedPath("/claude/")).toBe("/guide/connect");
+    expect(movedPath("/account")).toBe("/settings");
+    expect(movedPath("/")).toBeNull();
+    expect(movedPath("/guide")).toBeNull();
+    // Wherever an old address leads, PrepUp has a screen for it.
+    for (const old of ["/claude", "/account"]) expect(screenFor(movedPath(old)!)).not.toBeNull();
   });
 
   it("keeps old # links working", () => {
-    expect(legacyPath("#/claude")).toBe("/claude");
+    expect(legacyPath("#/claude")).toBe("/guide/connect");
     expect(legacyPath("#/costs")).toBe("/costs");
     expect(legacyPath("#/")).toBe("/");
   });

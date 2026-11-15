@@ -12,8 +12,8 @@ import { Link } from "./Link.js";
 
 const SECTIONS: { screen: Screen; label: string; icon: ReactNode }[] = [
   { screen: "deck", label: "Deck", icon: <DeckIcon /> },
-  { screen: "claude", label: "Claude", icon: <ChatIcon /> },
-  { screen: "account", label: "Account", icon: <PersonIcon /> },
+  { screen: "guide", label: "Guide", icon: <BookIcon /> },
+  { screen: "settings", label: "Settings", icon: <SlidersIcon /> },
 ];
 
 export function Shell({
@@ -38,13 +38,13 @@ export function Shell({
             PrepUp
           </Link>
           <nav className="appnav" aria-label="Sections">
-            {SECTIONS.filter((s) => s.screen !== "account").map((s) => (
+            {SECTIONS.map((s) => (
               <Link key={s.screen} to={PATHS[s.screen]} aria-current={current(s.screen)}>
                 {s.label}
               </Link>
             ))}
           </nav>
-          <AccountMenu account={account} onAccount={screen === "account"} onSignOut={onSignOut} />
+          <AccountMenu account={account} onSettings={screen === "settings"} onSignOut={onSignOut} />
         </div>
       </header>
 
@@ -66,14 +66,56 @@ export function Shell({
   );
 }
 
+/**
+ * The frame for someone who isn't signed in, around the pages anyone may
+ * read: the guide and the costs page.
+ */
+export function PublicFrame({
+  screen,
+  links,
+  children,
+}: {
+  screen: "guide" | "costs";
+  links: HostLinkTargets;
+  children: ReactNode;
+}) {
+  const current = (s: Screen) => (s === screen ? ("page" as const) : undefined);
+  return (
+    <div className="app public">
+      <header className="appbar">
+        <div className="appbar-in">
+          <Link to={PATHS.deck} className="brand">
+            PrepUp
+          </Link>
+          <nav className="appnav" aria-label="Sections">
+            <Link to={PATHS.guide} aria-current={current("guide")}>
+              Guide
+            </Link>
+            <Link to={PATHS.costs} aria-current={current("costs")}>
+              Costs
+            </Link>
+          </nav>
+          <Link to={PATHS.deck} className="btn primary appbar-end">
+            Sign in
+          </Link>
+        </div>
+      </header>
+      <main>{children}</main>
+      <footer className="app-foot">
+        <HostLinks links={links} showCosts={screen !== "costs"} showGuide={screen !== "guide"} />
+      </footer>
+    </div>
+  );
+}
+
 /** The round button at the end of the top bar, and the small menu it opens. */
 function AccountMenu({
   account,
-  onAccount,
+  onSettings,
   onSignOut,
 }: {
   account: AccountInfo | null;
-  onAccount: boolean;
+  onSettings: boolean;
   onSignOut?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -108,7 +150,7 @@ function AccountMenu({
         aria-label="Account menu"
         aria-haspopup="true"
         aria-expanded={open}
-        aria-current={onAccount ? "page" : undefined}
+        aria-current={onSettings ? "page" : undefined}
         onClick={() => setOpen((o) => !o)}
       >
         {initial || <PersonIcon />}
@@ -119,9 +161,9 @@ function AccountMenu({
             <div className="menu-how">{signedInLabel(account)}</div>
             {account?.email && <div className="menu-email">{account.email}</div>}
           </div>
-          <Link to={PATHS.account} className="menu-item" onClick={close}>
-            <PersonIcon />
-            Account
+          <Link to={PATHS.settings} className="menu-item" onClick={close}>
+            <SlidersIcon />
+            Settings
           </Link>
           <Link to={PATHS.costs} className="menu-item" onClick={close}>
             <CoinIcon />
@@ -166,10 +208,20 @@ function DeckIcon() {
     </svg>
   );
 }
-function ChatIcon() {
+function BookIcon() {
   return (
     <svg {...icon}>
-      <path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12Z" />
+      <path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v13H7.5A2.5 2.5 0 0 1 5 17.5v-13Z" />
+      <path d="M17 7h2v13h-2M8.5 9h5M8.5 12.5h5" />
+    </svg>
+  );
+}
+function SlidersIcon() {
+  return (
+    <svg {...icon}>
+      <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+      <circle cx="15" cy="7" r="2" />
+      <circle cx="9" cy="17" r="2" />
     </svg>
   );
 }
