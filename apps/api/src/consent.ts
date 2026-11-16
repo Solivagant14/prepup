@@ -1,9 +1,9 @@
 /**
- * Supabase's OAuth server needs the app to host a consent screen. When Claude
- * starts the connector login, Supabase sends the user here with an
+ * Supabase's OAuth server needs the app to host a consent screen. When an AI
+ * app starts the connector sign-in, Supabase sends the user here with an
  * authorization_id; the user signs in and approves, and Supabase redirects
- * back to Claude with a code. This is a minimal M0 version; the real web app
- * replaces it in M2.
+ * back to the AI app with a code. This page is deliberately small and
+ * self-contained: it is served by the API, not by the web app.
  */
 import type { OAuthProvider } from "@prepup/contracts";
 

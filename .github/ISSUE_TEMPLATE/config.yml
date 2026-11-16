@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/Solivagant14/prepup/discussions
+    about: Ask how something works, or talk an idea through before it becomes an issue.
+  - name: Security problem
+    url: https://github.com/Solivagant14/prepup/security/advisories/new
+    about: Report it privately. Please don't open a public issue.
+  - name: How to use PrepUp
+    url: https://prepup-amber.vercel.app/guide
+    about: The guide covers scores, fading, connecting an assistant and troubleshooting.

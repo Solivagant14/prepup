@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest a change or something new
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the problem before the solution. What can't you do today, or what is harder than it should be?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: Your idea, if you have one. Rough is fine.
