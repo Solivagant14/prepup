@@ -1,0 +1,31 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw instead. Screenshots help. Remove anything private first.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where?
+      options:
+        - The hosted copy (prepup-amber.vercel.app)
+        - My own copy
+        - Running locally
+    validations:
+      required: true
+  - type: input
+    id: assistant
+    attributes:
+      label: AI app, if it involves the connector
+      placeholder: Claude on iPhone, ChatGPT on the web, Cursor...
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device, if it involves the website
+      placeholder: Safari on iPhone 15, Chrome on Windows...

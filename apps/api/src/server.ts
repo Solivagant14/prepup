@@ -1,4 +1,4 @@
-/** Long-running server for local development (and any container host). */
+/** Long-running server for local development. Production runs as a Vercel function (vercel.ts). */
 import { serve } from "@hono/node-server";
 import { bootstrap } from "./bootstrap.js";
 import { loadConfig } from "./config.js";
