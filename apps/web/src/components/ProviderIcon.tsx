@@ -5,6 +5,8 @@ export const PROVIDER_LABEL: Record<OAuthProvider, string> = {
   github: "Continue with GitHub",
 };
 
+export const PROVIDER_NAME: Record<OAuthProvider, string> = { google: "Google", github: "GitHub" };
+
 /** Official brand marks for the sign-in buttons. */
 export function ProviderIcon({ provider }: { provider: OAuthProvider }) {
   if (provider === "google") {

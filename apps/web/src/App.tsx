@@ -7,10 +7,19 @@ import { Deck } from "./components/Deck.js";
 import { Guide } from "./components/Guide.js";
 import { Settings } from "./components/Settings.js";
 import { PublicFrame, Shell } from "./components/Shell.js";
-import { SignIn } from "./components/SignIn.js";
+import { NewPassword, SignIn } from "./components/SignIn.js";
 import type { AccountInfo } from "./lib/account.js";
+import { readArrival } from "./lib/auth.js";
 import { createApi, loadConfig, type Api, type AppConfig, type HostLinkTargets } from "./lib/api.js";
 import { navigate, PATHS, screenFor, TITLES, usePath } from "./lib/route.js";
+
+/**
+ * What a link or a sign-in provider brought back in the address: a failure to
+ * report, or a password reset to finish. Read once, before the sign-in client
+ * consumes the address, and a failure is then cleared so a reload doesn't repeat it.
+ */
+const ARRIVAL = readArrival(window.location.hash, window.location.search);
+if (ARRIVAL.message) window.history.replaceState(null, "", window.location.pathname);
 
 export function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -22,13 +31,13 @@ export function App() {
     loadConfig().then(setConfig, (e: Error) => setError(e.message));
   }, []);
 
-  if (error) return <p className="auth error">{error}</p>;
+  if (error) return <p className="app-error error">{error}</p>;
   if (!config) return null;
   if (config.authMode === "dev") return <Home api={devApi} links={config} account={null} />;
   if (!config.supabaseUrl || !config.supabasePublishableKey) {
     // The guide and the costs page need no sign-in settings, so they still show.
     if (screen === "guide" || screen === "costs") return <PublicPage screen={screen} links={config} />;
-    return <p className="auth error">PrepUp isn't configured yet (missing Supabase settings).</p>;
+    return <p className="app-error error">PrepUp isn't configured yet (missing Supabase settings).</p>;
   }
   return (
     <SupabaseApp
@@ -105,10 +114,16 @@ function SupabaseApp({
 }) {
   const supabase = useMemo<SupabaseClient>(() => createClient(url, publishableKey), [url, publishableKey]);
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  // A password-reset link signs the person in; they still owe a new password.
+  const [recovering, setRecovering] = useState(ARRIVAL.recovery);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "PASSWORD_RECOVERY") setRecovering(true);
+      if (event === "SIGNED_OUT") setRecovering(false);
+      setSession(s);
+    });
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
@@ -125,8 +140,9 @@ function SupabaseApp({
   if (session === undefined) return null;
   if (!session) {
     if (screen === "guide" || screen === "costs") return <PublicPage screen={screen} links={links} />;
-    return <SignIn supabase={supabase} providers={providers} links={links} />;
+    return <SignIn supabase={supabase} providers={providers} links={links} arrival={ARRIVAL.message} />;
   }
+  if (recovering) return <NewPassword supabase={supabase} links={links} onDone={() => setRecovering(false)} />;
   const account: AccountInfo = {
     email: session.user.email ?? null,
     provider: typeof session.user.app_metadata?.provider === "string" ? session.user.app_metadata.provider : null,
