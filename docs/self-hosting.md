@@ -16,7 +16,7 @@ Dashboard labels move around; the settings below are what matters.
 1. Create a project in the region closest to you. Save the database password.
 2. **Signing keys:** under the JWT settings, switch to asymmetric signing keys (ES256). PrepUp verifies tokens against the project's public keys and never holds a secret.
 3. **OAuth server:** under Authentication, turn on the OAuth 2.1 server and **dynamic client registration** (how an AI app such as Claude registers itself). Set the authorization (consent) path to `/oauth/consent`.
-4. **Sign-in:** enable Google by following [social-login.md](social-login.md). For a shared instance, leave **Allow new users to sign up** on.
+4. **Sign-in:** set up email, Google and GitHub by following [sign-in.md](sign-in.md), including its email-delivery step. For a shared instance, leave **Allow new users to sign up** on.
 5. Note three values: the project URL (`https://<ref>.supabase.co`), the publishable key, and the **transaction pooler** connection string (port 6543).
 
 ## 2. Create the tables

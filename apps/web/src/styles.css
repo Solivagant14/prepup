@@ -257,21 +257,56 @@ textarea.explanation { width: 100%; padding: 12px 14px; border: 1px solid var(--
 .link-options button:disabled { color: var(--muted); cursor: default; }
 .source-link { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 
-.auth { min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
-.auth form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
-.auth h1 { margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
-.auth label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
-.auth input { height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
-.auth .row { display: flex; gap: 8px; }
-.auth .row .btn { flex: 1; height: 44px; }
+/* Signing in: what PrepUp is on one side (wide screens), the form on the other. */
+.auth { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); background: var(--bg); }
+.auth-pitch { display: none; }
+.auth-card { width: 100%; max-width: 400px; margin: 0 auto; padding: 40px 20px 32px; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+.auth-brand { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
+.auth-card h1 { margin: 12px 0 0; font-size: 26px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.2; }
+.auth-lead { margin: -8px 0 4px; color: var(--ink-2); }
+.auth-lead strong { color: var(--ink); font-weight: 500; overflow-wrap: anywhere; }
+.auth-card form { display: flex; flex-direction: column; gap: 16px; }
+.auth-providers { display: flex; flex-direction: column; gap: 8px; }
+.auth .social { display: flex; align-items: center; justify-content: center; gap: 10px; height: 48px; width: 100%; font-size: 15px; }
+.auth .social:hover:not(:disabled) { border-color: #a1a1aa; background: var(--bg); }
+.auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-label { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; font-weight: 500; }
+.auth-field input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid #d4d4d8; border-radius: 10px; background: var(--surface); font-size: 16px; }
+.auth-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+.auth-field input[aria-invalid="true"] { border-color: var(--rose); }
+.auth-password { position: relative; }
+.auth-password input { padding-right: 68px; }
+.auth-password button { position: absolute; top: 4px; right: 4px; height: 40px; min-width: 56px; padding: 0 10px; border: none; border-radius: 8px; background: none; color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.auth-password button:hover { background: var(--sunken); color: var(--ink); }
+.auth-hint { margin: 0; font-size: 13px; color: var(--muted); }
+.auth-hint.center { text-align: center; }
+.auth-problem { margin: 0; font-size: 13px; color: var(--rose); }
+.auth-alert { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; border: 1px solid #ecc9d2; border-radius: 10px; background: #fbf1f3; color: #8f2f4a; font-size: 14px; }
+.auth-link { padding: 0; border: none; background: none; color: var(--accent); font-size: 14px; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; min-height: 28px; }
+.auth-label .auth-link { font-size: 13px; }
+.auth-alert .auth-link { color: #8f2f4a; }
+.auth-wide { width: 100%; height: 48px; font-size: 15px; }
+.auth-switch { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 16px; margin: 0; font-size: 14px; color: var(--ink-2); }
 .error { color: var(--rose); font-size: 13px; }
-.auth .social { display: flex; align-items: center; justify-content: center; gap: 10px; height: 44px; width: 100%; }
-.auth .social:hover { border-color: #a1a1aa; }
-.auth .social.primary { height: 48px; }
-.auth .social.primary:hover { border-color: var(--btn); opacity: 0.92; }
-.auth-switch { align-self: center; min-height: 44px; text-decoration: underline; }
 .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.auth .host-links { margin-top: 8px; }
+@media (max-width: 899px) {
+  .auth-card { justify-content: flex-start; padding-top: max(40px, 8dvh); }
+  .auth-link { min-height: 44px; }
+  .auth-label .auth-link { min-height: 0; padding: 6px 0; }
+}
+@media (min-width: 900px) {
+  .auth { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+  .auth-pitch { display: flex; flex-direction: column; justify-content: center; gap: 20px; padding: 48px clamp(32px, 6vw, 88px); background: #312e81; color: #fff; }
+  .auth-pitch h2 { margin: 0; font-size: 40px; font-weight: 500; letter-spacing: -0.03em; line-height: 1.1; }
+  .auth-pitch ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; font-size: 16px; color: #c9cefc; }
+  .auth-pitch strong { color: #fff; font-weight: 500; }
+  .auth-more { align-self: flex-start; color: #fff; font-size: 15px; font-weight: 500; text-underline-offset: 3px; }
+  .auth-brand.small { display: none; }
+  .auth-card { padding: 48px 32px; }
+  .auth-card h1 { margin-top: 0; }
+}
 
 /* Links about this copy: costs, source, support. */
 .host-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 16px; }
@@ -520,3 +555,6 @@ details.more > :not(summary) { margin: 0 24px 22px; }
   .app-tabs button, .say .btn, .guide-body .copy-row .btn, .code-block .btn { height: 44px; }
   .app-steps { padding: 14px 14px 4px; }
 }
+
+/* The whole screen given to one message, when PrepUp can't start. */
+.app-error { min-height: 100dvh; display: grid; place-items: center; margin: 0; padding: 16px; text-align: center; }
