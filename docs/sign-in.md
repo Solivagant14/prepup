@@ -4,7 +4,7 @@ About 30 minutes. PrepUp's sign-in screen offers email and password (sign in, cr
 
 You'll need two addresses:
 
-- **Your app:** `https://<project>.vercel.app`
+- **Your app:** `https://<project>.vercel.app`, or your own domain if you added one
 - **Supabase callback:** `https://<ref>.supabase.co/auth/v1/callback`
 
 Dashboard labels move around; the settings are what matter.

@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-[**Try it**](https://prepup-amber.vercel.app) · [Guide](https://prepup-amber.vercel.app/guide) · [Run your own](docs/self-hosting.md) · [Contribute](CONTRIBUTING.md)
+[**Try it**](https://prepup.site) · [Guide](https://prepup.site/guide) · [Run your own](docs/self-hosting.md) · [Contribute](CONTRIBUTING.md)
 
 </div>
 
@@ -31,16 +31,16 @@ PrepUp is a tracker for anything you're trying to learn: interview topics, exam 
 
 PrepUp only keeps the record. All testing runs in your own AI app, on your own plan, through an MCP connector (MCP is the open standard that lets AI apps use outside tools).
 
-It works with any app that can add a remote MCP server. The [guide](https://prepup-amber.vercel.app/guide/connect) has steps for Claude, ChatGPT, Cursor and VS Code. Claude is the only one tested so far; the others are marked as untested.
+It works with any app that can add a remote MCP server. The [guide](https://prepup.site/guide/connect) has steps for Claude, ChatGPT, Cursor and VS Code. Claude is the only one tested so far; the others are marked as untested.
 
 ## Get started
 
-1. Open [prepup-amber.vercel.app](https://prepup-amber.vercel.app) and create an account.
+1. Open [prepup.site](https://prepup.site) and create an account.
 2. Add two or three terms you want to learn.
-3. Follow [Connect your assistant](https://prepup-amber.vercel.app/guide/connect) for the app you use.
+3. Follow [Connect your assistant](https://prepup.site/guide/connect) for the app you use.
 4. Start a new chat and say **"test me on my PrepUp topics"**.
 
-The hosted copy is free and runs on free hosting plans. Its [costs page](https://prepup-amber.vercel.app/costs) shows what it costs to run and the limits each person gets. Only you can read your deck, and **Erase all my data** in Settings removes it.
+The hosted copy is free and runs on free hosting plans. Its [costs page](https://prepup.site/costs) shows what it costs to run and the limits each person gets. Only you can read your deck, and **Erase all my data** in Settings removes it.
 
 ## Run your own
 
@@ -61,7 +61,7 @@ pnpm test
 
 | | |
 |---|---|
-| [Using PrepUp](https://prepup-amber.vercel.app/guide) | The guide: scores, fading, links, connecting an assistant, troubleshooting |
+| [Using PrepUp](https://prepup.site/guide) | The guide: scores, fading, links, connecting an assistant, troubleshooting |
 | [Architecture](docs/architecture.md) | How it's built, the rules, and why |
 | [Run your own](docs/self-hosting.md) | Self-hosting on Vercel and Supabase |
 | [Configuration](docs/configuration.md) | Every environment variable |
@@ -69,7 +69,7 @@ pnpm test
 
 ## What's next
 
-There is no fixed roadmap. PrepUp grows as ideas prove useful. One being explored is smarter scheduling (FSRS) in place of the fixed 14 days. Have an idea? [Start a discussion](https://github.com/Solivagant14/prepup/discussions).
+There is no fixed roadmap. PrepUp grows as ideas prove useful. Have an idea? [Start a discussion](https://github.com/Solivagant14/prepup/discussions).
 
 ## License
 

@@ -11,7 +11,7 @@ Invalid values stop the server at start-up with a message naming the variable.
 | `DATABASE_URL` | Postgres connection string. On Vercel use Supabase's **transaction pooler** (port 6543) |
 | `SUPABASE_URL` | Your Supabase project URL, `https://<ref>.supabase.co` |
 | `SUPABASE_PUBLISHABLE_KEY` | The project's publishable key. Safe in the browser |
-| `PUBLIC_URL` | The address people open, `https://<project>.vercel.app`, no trailing slash. The connector address is built from it |
+| `PUBLIC_URL` | The address people open, `https://<project>.vercel.app` or your own domain, no trailing slash. The connector address is built from it |
 
 ## Sign-in
 
