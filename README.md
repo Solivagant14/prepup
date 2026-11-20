@@ -69,7 +69,7 @@ pnpm test
 
 ## What's next
 
-There is no fixed roadmap. PrepUp grows as ideas prove useful. One being explored is smarter scheduling (FSRS) in place of the fixed 14 days. Have an idea? [Start a discussion](https://github.com/Solivagant14/prepup/discussions).
+There is no fixed roadmap. PrepUp grows as ideas prove useful. Have an idea? [Start a discussion](https://github.com/Solivagant14/prepup/discussions).
 
 ## License
 
