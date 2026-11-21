@@ -62,7 +62,7 @@ Read [docs/architecture.md](docs/architecture.md). It is short, and it lists the
 - Business rules live only in `packages/core`. The REST and MCP adapters stay thin.
 - Input shapes are defined once, in `packages/contracts`.
 - Scores are computed from `review_events`. Never store a score on a topic.
-- Nothing is saved or linked by an assistant without the user's yes.
+- Nothing is saved, linked or deleted by an assistant without the user's yes.
 - Product copy says "your assistant", not one app's name, and isn't written for one role or field.
 
 ## Send a change

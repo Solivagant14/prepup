@@ -61,7 +61,7 @@ These are product rules, enforced in the core and covered by tests.
 
 **Assistants**
 
-- Nothing is saved or linked by an assistant without the user's yes in chat. Each tool description says so.
+- Nothing is saved, linked or deleted by an assistant without the user's yes in chat. Each tool description says so.
 - An assistant can draft the card's explanation after a test. It is saved only if the user approves it, in the same transaction as the score.
 - A test has two layers: fixed rules (one topic at a time, no peeking at saved notes, nothing saved without a yes) and the user's own testing style. A style can never override a fixed rule.
 - PrepUp works with any MCP client. Product copy says "your assistant" and names an app only in that app's connect steps.

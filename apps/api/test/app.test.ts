@@ -337,6 +337,7 @@ describe("MCP", () => {
     const tools = await mcp(USER, "tools/list");
     expect(tools.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
       "add_topic",
+      "delete_topic",
       "get_topic",
       "link_topics",
       "list_topics",
@@ -573,6 +574,33 @@ describe("topic links over MCP", () => {
     expect((await call(USER, "list_topics", {})).text).toContain('"term": "Embeddings"');
   });
 
+  it("deletes a topic only with the user's confirmation, and only from their own deck", async () => {
+    for (const term of ["RAG", "Embeddings"]) await call(USER, "add_topic", { term });
+    await call(OTHER, "add_topic", { term: "RAG" });
+    await call(USER, "link_topics", { term: "RAG", buildsOnTerm: "Embeddings" });
+
+    // No confirmation, or a false one: refused, and nothing is deleted.
+    const unconfirmed = await call(USER, "delete_topic", { term: "Embeddings" });
+    expect(unconfirmed.isError).toBe(true);
+    expect(unconfirmed.text).toMatch(/confirm/i);
+    expect((await call(USER, "delete_topic", { term: "Embeddings", confirmed: false })).isError).toBe(true);
+    expect((await call(USER, "get_topic", { term: "Embeddings" })).isError).toBe(false);
+
+    // Another user can't reach it, even with the confirmation.
+    expect((await call(OTHER, "delete_topic", { term: "Embeddings", confirmed: true })).isError).toBe(true);
+    expect((await call(USER, "get_topic", { term: "Embeddings" })).isError).toBe(false);
+
+    // Confirmed: gone, with its link. What built on it stays. The other user's same-named topic is untouched.
+    const gone = await call(USER, "delete_topic", { term: "embeddings", confirmed: true });
+    expect(gone.text).toMatch(/Deleted "Embeddings" from PrepUp\. This can't be undone\./);
+    expect((await call(USER, "get_topic", { term: "Embeddings" })).isError).toBe(true);
+    expect(data((await call(USER, "get_topic", { term: "RAG" })).text).buildsOn).toEqual([]);
+    expect((await call(OTHER, "get_topic", { term: "RAG" })).isError).toBe(false);
+
+    // Deleting it again is a readable error, not a crash.
+    expect((await call(USER, "delete_topic", { term: "Embeddings", confirmed: true })).text).toMatch(/No topic called/);
+  });
+
   it("searches by text without revealing explanations", async () => {
     for (const term of ["Vector databases", "Vector search", "RAG"]) await call(USER, "add_topic", { term });
     await call(OTHER, "add_topic", { term: "Vector clocks" });
@@ -608,13 +636,17 @@ describe("topic links over MCP", () => {
     expect(tool("link_topics").inputSchema.required).toEqual(["term", "buildsOnTerm"]);
     expect(tool("unlink_topics").inputSchema.required).toEqual(["term", "buildsOnTerm"]);
     expect(tool("search_topics").annotations?.readOnlyHint).toBe(true);
+    expect(tool("delete_topic").description).toMatch(/Only call after the user has asked to delete this topic/);
+    expect(tool("delete_topic").description).toMatch(/Never delete on your own initiative/);
+    expect(tool("delete_topic").inputSchema.required).toEqual(["term", "confirmed"]);
+    expect(tool("delete_topic").annotations).toMatchObject({ destructiveHint: true });
 
     const init = await mcp(USER, "initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
       clientInfo: { name: "test", version: "1" },
     });
-    expect(init.result.serverInfo.version).toBe("0.4.0");
+    expect(init.result.serverInfo.version).toBe("0.5.0");
     expect(init.result.instructions).toMatch(/call link_topics only after they say yes/);
     expect(init.result.instructions).toMatch(/builds on is weaker, test that prerequisite first/);
   });

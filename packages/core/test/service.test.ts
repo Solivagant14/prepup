@@ -137,6 +137,24 @@ describe("PrepUpService", () => {
     const again = await service.addTopic(alice, { term: "rag" });
     expect(again).toMatchObject({ created: true, topic: { score: 1 } });
   });
+
+  it("deletes by term only when the user's confirmation is passed", async () => {
+    const { service } = setup();
+    const alice = await service.resolveActor("alice");
+    const bob = await service.resolveActor("bob");
+    await service.addTopic(alice, { term: "Lang Chain" });
+    await service.addTopic(bob, { term: "LangChain" });
+
+    await expect(service.deleteTopicByTerm(alice, { term: "LangChain" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(service.deleteTopicByTerm(alice, { term: "LangChain", confirmed: false })).rejects.toMatchObject({ code: "invalid" });
+    expect(await service.listTopics(alice)).toHaveLength(1);
+
+    // The same card under another spelling, in your own deck only.
+    expect(await service.deleteTopicByTerm(alice, { term: "langchain", confirmed: true })).toEqual({ term: "Lang Chain" });
+    expect(await service.listTopics(alice)).toEqual([]);
+    expect(await service.listTopics(bob)).toHaveLength(1);
+    await expect(service.deleteTopicByTerm(alice, { term: "LangChain", confirmed: true })).rejects.toMatchObject({ code: "not_found" });
+  });
 });
 
 describe("explanations drafted by Claude", () => {
