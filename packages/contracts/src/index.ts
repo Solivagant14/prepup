@@ -85,6 +85,18 @@ export const GetTopicInput = z.object({
 });
 export type GetTopicInput = z.infer<typeof GetTopicInput>;
 
+/**
+ * Deleting a topic by term, as an assistant asks. `confirmed` must be the literal
+ * `true`: the assistant states that the user asked for this and said yes in chat.
+ */
+export const DeleteTopicInput = z.object({
+  term: Term.describe("The topic to delete, as it appears in PrepUp"),
+  confirmed: z
+    .literal(true, { error: "Ask the user to confirm the delete first, then pass confirmed: true" })
+    .describe("Pass true only after the user asked to delete this topic and said yes in chat, knowing it is permanent"),
+});
+export type DeleteTopicInput = z.infer<typeof DeleteTopicInput>;
+
 /** A "builds on" link named by terms: how Claude says it. */
 export const LinkTopicsInput = z.object({
   term: Term.describe("The topic that builds on the other, as it appears in PrepUp, e.g. 'RAG'"),

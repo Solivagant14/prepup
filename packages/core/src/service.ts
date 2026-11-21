@@ -6,6 +6,7 @@
 import {
   AddTopicInput,
   DEFAULT_MAX_TOPICS,
+  DeleteTopicInput,
   LinkTopicInput,
   LinkTopicsInput,
   ListTopicsInput,
@@ -258,6 +259,12 @@ export class PrepUpService {
     const deleted = await this.repo.deleteTopic(actor.workspaceId, topicId);
     if (!deleted) throw new DomainError("not_found", "Topic not found");
     return { term: topic.term };
+  }
+
+  /** The same delete by term, as an assistant makes it. It needs the user's confirmation, passed as `confirmed: true`. */
+  async deleteTopicByTerm(actor: Actor, input: unknown): Promise<{ term: string }> {
+    const { term } = parse(DeleteTopicInput, input);
+    return this.deleteTopic(actor, (await this.recordByTerm(actor, term)).id);
   }
 
   /** Personal settings. Until the user saves a style of their own, they get the default preset. */

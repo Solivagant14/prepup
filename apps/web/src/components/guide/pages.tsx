@@ -540,8 +540,8 @@ function Assistant() {
             ))}
           </ul>
           <p>
-            It can't delete a topic or erase your data. Only you can, on a card or in{" "}
-            <Link to={PATHS.settings}>Settings</Link>.
+            It deletes a single topic only when you ask and say yes in chat, and a delete can't be undone. It can't
+            erase all your data: only you can, in <Link to={PATHS.settings}>Settings</Link>.
           </p>
 
           <h2>The details</h2>
@@ -689,7 +689,8 @@ function Data({ links }: PageProps) {
       <h2>Removing it</h2>
       <ul>
         <li>
-          <strong>One topic:</strong> open its card, choose ⋯, then Delete card. Its history goes with it.
+          <strong>One topic:</strong> open its card, choose ⋯, then Delete card. Or ask your assistant and say yes when
+          it checks. Its history goes with it.
         </li>
         <li>
           <strong>Everything:</strong> <Link to={PATHS.settings}>Settings</Link>, then Erase all my data. Your sign-in

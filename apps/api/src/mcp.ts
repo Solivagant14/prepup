@@ -7,6 +7,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   AddTopicInput,
+  DeleteTopicInput,
   GetTopicInput,
   LinkTopicsInput,
   ListTopicsInput,
@@ -77,6 +78,12 @@ export const TOOLS = {
     title: "Remove a link",
     description:
       "Remove a \"builds on\" link between two topics: term no longer builds on buildsOnTerm. Only call after the user has confirmed. Both topics stay in the deck, with their scores and history.",
+    readOnly: false,
+  },
+  delete_topic: {
+    title: "Delete a topic",
+    description:
+      "Permanently delete one topic from the user's deck, with its score history, explanation and links. It cannot be undone. Only call after the user has asked to delete this topic and, in chat, you have named it, said it is permanent, and they have said yes; then pass confirmed: true. Never delete on your own initiative. One topic per call.",
     readOnly: false,
   },
 } as const;
@@ -151,7 +158,7 @@ export async function testingStyleFor(service: PrepUpService, actor: Actor): Pro
  */
 export function createMcpServer(service: PrepUpService, actor: Actor, style: string = DEFAULT_TESTING_STYLE): McpServer {
   const server = new McpServer(
-    { name: "prepup", title: "PrepUp", version: "0.4.0" },
+    { name: "prepup", title: "PrepUp", version: "0.5.0" },
     { instructions: buildInstructions(style), capabilities: { tools: {}, prompts: {} } },
   );
 
@@ -277,6 +284,20 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
             : `"${topic.term}" wasn't linked to "${buildsOn.term}"; nothing changed.`,
           brief(topic),
         );
+      }),
+  );
+
+  server.registerTool(
+    "delete_topic",
+    {
+      ...meta("delete_topic"),
+      inputSchema: DeleteTopicInput,
+      annotations: { destructiveHint: true, idempotentHint: false },
+    },
+    async (input) =>
+      guard(async () => {
+        const { term } = await service.deleteTopicByTerm(actor, input);
+        return toolResult(`Deleted "${term}" from PrepUp. This can't be undone.`, { term, deleted: true });
       }),
   );
 
