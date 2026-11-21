@@ -73,6 +73,18 @@ Open **Guide › Connect your assistant** (`/guide/connect`) on your site. It sh
 - Tell people what you store: their topics, scores, explanations, test answers and sign-in email. They can remove all but the email with **Erase all my data** in Settings; you can delete the sign-in record in Supabase under Authentication › Users.
 - Optionally describe your copy on its public costs page: see [configuration.md](configuration.md#the-costs-page).
 
+## Use your own domain
+
+Optional. Replace `example.com` with your domain.
+
+1. **Vercel:** under Settings › Domains, add `example.com` and create the DNS records it shows. Add `www.example.com` too, set to redirect to `example.com`.
+2. **Vercel:** set `PUBLIC_URL` to `https://example.com` and redeploy.
+3. **Supabase:** under URL Configuration, set **Site URL** to `https://example.com` and add `https://example.com/**` to **Redirect URLs**. The Site URL also decides where the connector's consent page opens, so connecting an AI app fails until it matches. Keep the old address in Redirect URLs until everyone has moved.
+4. **Google:** add `https://example.com` to the client's Authorized JavaScript origins. The redirect URI stays the Supabase callback.
+5. **GitHub:** change the OAuth app's Homepage URL. The callback stays the same.
+6. **Reconnect assistants:** a connector added with the old address stops working once `PUBLIC_URL` changes, because the server now names the new one. Remove it and add `https://example.com/mcp`.
+7. Run the checks in [step 5](#5-check-it) against the new address.
+
 ## If something's off
 
 | Symptom | Probable cause |

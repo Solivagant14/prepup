@@ -14,7 +14,7 @@ body:
     attributes:
       label: Where?
       options:
-        - The hosted copy (prepup-amber.vercel.app)
+        - The hosted copy (prepup.site)
         - My own copy
         - Running locally
     validations:

@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/Solivagant14/prepup/security/advisories/new
     about: Report it privately. Please don't open a public issue.
   - name: How to use PrepUp
-    url: https://prepup-amber.vercel.app/guide
+    url: https://prepup.site/guide
     about: The guide covers scores, fading, connecting an assistant and troubleshooting.

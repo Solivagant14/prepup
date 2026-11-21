@@ -1,6 +1,6 @@
 # Documentation
 
-**Using PrepUp?** The guide lives in the app and needs no sign-in: [prepup-amber.vercel.app/guide](https://prepup-amber.vercel.app/guide).
+**Using PrepUp?** The guide lives in the app and needs no sign-in: [prepup.site/guide](https://prepup.site/guide).
 
 These pages are for people who work on PrepUp or run their own copy.
 

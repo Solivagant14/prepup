@@ -10,7 +10,7 @@ Include what you found, how to reproduce it, and what someone could do with it. 
 
 ## What counts
 
-Anything that lets someone read or change another person's deck, skip sign-in, get around the per-user limits, or reach secrets. The hosted copy at prepup-amber.vercel.app is in scope, but please test against your own account and don't disrupt it for others.
+Anything that lets someone read or change another person's deck, skip sign-in, get around the per-user limits, or reach secrets. The hosted copy at prepup.site is in scope, but please test against your own account and don't disrupt it for others.
 
 Problems in Supabase or Vercel themselves belong with those companies.
 
