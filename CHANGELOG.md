@@ -6,6 +6,7 @@ If you run your own copy, entries marked **migration** need `pnpm db:migrate` af
 
 ## November 2026
 
+- **Your assistant can delete a topic.** A new `delete_topic` tool removes one topic, with its history and links, only after you ask and say yes in chat. It can't be undone. Erasing all your data stays in Settings. Connectors pick it up automatically, with no migration.
 - **New address: prepup.site.** The hosted copy moved from prepup-amber.vercel.app. A connector added with the old address stops working; remove it and add `https://prepup.site/mcp`. Self-hosters: [Use your own domain](docs/self-hosting.md#use-your-own-domain).
 - **Open-source housekeeping.** A shorter README, layered docs, a contributing guide, issue and pull request templates. The Dockerfile is gone: Vercel is the supported way to host.
 - **A full sign-in screen** ([#18](https://github.com/Solivagant14/prepup/pull/18)). Sign in, create account and reset password with email, alongside Google and GitHub, with plain-language errors.
