@@ -489,6 +489,9 @@ describe("the decks migration", () => {
     const ragView = await migrated.findByTerm(a, "RAG");
     expect(ragView).toMatchObject({ score: 3, deck: { name: "My deck" }, buildsOn: [{ term: "Embeddings" }] });
     expect((await raw(`select count(*)::int as n from decks where workspace_id = '${wb}'`)).rows[0]!.n).toBe(0);
+    // The automatic-linking migration counts a topic that already builds on something as checked.
+    expect(ragView.needsLinks).toBe(false);
+    expect((await migrated.findByTerm(a, "Embeddings")).needsLinks).toBe(true);
     // A new topic with the same deck name lands in the migrated deck, not a second "My deck".
     expect((await migrated.addTopic(a, { term: "Agents" })).topic.deck.id).toBe(ragView.deck.id);
   });
