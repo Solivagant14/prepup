@@ -15,13 +15,16 @@ export type Score = z.infer<typeof Score>;
 export const LEVEL_NAMES = ["Shaky", "Learning", "Getting there", "Confident", "Can explain"] as const;
 
 /**
- * A topic that has never been tested or scored shows 0. Only a test or a
- * manual edit gives it a stored score (1–5), and a score never fades below 1.
+ * A topic that has never been tested or scored shows 0, and you can set a
+ * topic back to 0 yourself. A test always records 1–5, and a score never
+ * fades below 1 (a 0 doesn't fade).
  */
 export const UNTESTED_SCORE = 0;
 export const UNTESTED_LEVEL = "Not tested yet";
-/** The score a topic shows: 0 until its first test or manual edit, then 1–5. */
+/** The score a topic shows: 0 (never scored, or set to 0 by you) or 1–5. */
 export type ShownScore = typeof UNTESTED_SCORE | Score;
+/** A score you set yourself: 0 resets the topic to "Not tested yet". */
+export const ManualScore = z.number().int().min(0).max(5);
 export type LevelName = (typeof LEVEL_NAMES)[number] | typeof UNTESTED_LEVEL;
 
 /** How many topics one workspace may hold unless the host sets another cap. Matches the largest list page. */
@@ -131,7 +134,7 @@ export const SearchTopicsInput = z.object({
 });
 export type SearchTopicsInput = z.input<typeof SearchTopicsInput>;
 
-export const SetScoreInput = z.object({ score: Score });
+export const SetScoreInput = z.object({ score: ManualScore });
 export type SetScoreInput = z.infer<typeof SetScoreInput>;
 
 export const UpdateTopicInput = z
@@ -199,7 +202,7 @@ export interface TopicView {
   /** Who last wrote the explanation: you in the web app, or Claude after a test. */
   explanationBy: "you" | "claude" | null;
   explanationUpdatedAt: string | null;
-  /** 0 until the first test or manual edit, then 1–5. */
+  /** 0 when never scored or set to 0 by you, otherwise 1–5. */
   score: ShownScore;
   level: LevelName;
   createdAt: string;

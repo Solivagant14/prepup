@@ -157,7 +157,9 @@ export const reviewEvents = pgTable(
   },
   (t) => [
     index("review_events_topic_user_time_idx").on(t.topicId, t.userId, t.createdAt),
-    check("review_events_score_range", sql`${t.score} IS NULL OR ${t.score} BETWEEN 1 AND 5`),
+    check("review_events_score_range", sql`${t.score} IS NULL OR ${t.score} BETWEEN 0 AND 5`),
+    // 0 resets a topic to "Not tested yet"; only you can set it, never a test.
+    check("review_events_zero_is_manual", sql`${t.score} IS DISTINCT FROM 0 OR ${t.kind} = 'manual_edit'`),
     check(
       "review_events_score_matches_kind",
       sql`(${t.kind} = 'explanation') = (${t.score} IS NULL)`,

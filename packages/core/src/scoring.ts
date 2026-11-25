@@ -16,8 +16,8 @@ export const WEEK_DAYS = 7;
 const IMPORTANCE_WEIGHT: Record<Importance, number> = { high: 3, medium: 2, low: 1 };
 
 export interface ScoreInputs {
-  /** The latest stored score (from a Claude test or a manual edit), or null if never scored. */
-  lastScore: { score: Score; at: Date } | null;
+  /** The latest stored score (a Claude test is 1–5; a manual edit may be 0), or null if never scored. */
+  lastScore: { score: ShownScore; at: Date } | null;
   /** When the card was last tested by Claude. Only this resets the fade clock. */
   lastTestAt: Date | null;
   createdAt: Date;
@@ -25,7 +25,7 @@ export interface ScoreInputs {
 }
 
 export interface ScoreState {
-  /** 0 until the first test or manual edit, then 1–5. */
+  /** 0 when never scored or set to 0 by hand, otherwise 1–5. */
   score: ShownScore;
   daysUntilDrop: number | null;
   fadingSoon: boolean;
@@ -41,8 +41,8 @@ const clampScore = (n: number): Score => Math.min(5, Math.max(1, n)) as Score;
  * when it would have.
  */
 export function computeScore({ lastScore, lastTestAt, createdAt, now }: ScoreInputs): ScoreState {
-  // Never tested or scored: shows 0, and there is nothing to fade.
-  if (lastScore === null) {
+  // Never scored, or set back to 0 by hand: shows 0, and there is nothing to fade.
+  if (lastScore === null || lastScore.score === UNTESTED_SCORE) {
     return { score: UNTESTED_SCORE, daysUntilDrop: null, fadingSoon: false, fadingThisWeek: false };
   }
   const period = FADE_PERIOD_DAYS * DAY_MS;

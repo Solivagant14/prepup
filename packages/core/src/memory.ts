@@ -60,7 +60,8 @@ export class InMemoryRepository implements PrepUpRepository {
   /** Validates everything first, then writes, so a failure leaves nothing half-saved (like a transaction). */
   async applyChanges({ settings, events }: ChangeSet) {
     for (const e of events) {
-      if (e.score !== null && (e.score < 1 || e.score > 5)) throw new Error("score out of range");
+      if (e.score !== null && (e.score < 0 || e.score > 5)) throw new Error("score out of range");
+      if (e.score === 0 && e.kind !== "manual_edit") throw new Error("only a manual edit can set 0");
       if (e.kind === "claude_test" && e.score === 5 && !e.explained) throw new Error("unearned 5");
     }
     if (settings) this.upsertSettings(settings.userId, settings.topicId, settings.patch);

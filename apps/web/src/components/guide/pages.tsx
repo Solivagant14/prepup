@@ -373,7 +373,8 @@ function Scores() {
     <>
       <p className="guide-lead">
         Every topic has one score from 1 to 5. The darker the card, the better you know it. A new topic shows{" "}
-        <strong>0</strong> (not tested yet) until its first test or until you set a score.
+        <strong>0</strong> (not tested yet) until its first test or until you set a score. You can also set a topic back to 0
+        yourself to start it over; a test always gives 1 to 5.
       </p>
 
       <ul className="levels">

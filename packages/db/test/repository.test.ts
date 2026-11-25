@@ -107,6 +107,24 @@ describe("PostgresRepository", () => {
     ).rejects.toThrow();
   });
 
+  it("stores a manual 0, and refuses a 0 from a test in the database too", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    await service.recordReview(me, { term: "RAG", score: 3, feedback: "Good" });
+    expect(await service.setScore(me, topic.id, { score: 0 }, "web")).toMatchObject({ score: 0, level: "Not tested yet" });
+    await expect(
+      db.insert(schema.reviewEvents).values({
+        workspaceId: me.workspaceId,
+        topicId: topic.id,
+        userId: me.userId,
+        kind: "claude_test",
+        score: 0,
+        explained: false,
+        source: "mcp",
+      }),
+    ).rejects.toThrow();
+  });
+
   it("cascades a delete to settings and review events", async () => {
     const me = await service.resolveActor(randomUUID());
     const { topic } = await service.addTopic(me, { term: "Evals" });

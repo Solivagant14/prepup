@@ -10,6 +10,11 @@ describe("computeScore", () => {
     expect(levelName(s.score)).toBe("Not tested yet");
   });
 
+  it("treats a manual 0 like a new card: 0, and nothing to fade", () => {
+    const reset = { lastScore: { score: 0 as const, at: day(20) }, lastTestAt: day(5), createdAt: day(0) };
+    expect(computeScore({ ...reset, now: day(100) })).toEqual({ score: 0, daysUntilDrop: null, fadingSoon: false, fadingThisWeek: false });
+  });
+
   it("never fades a scored card back to 0", () => {
     const edited = { lastScore: { score: 2 as const, at: day(1) }, lastTestAt: null, createdAt: day(0) };
     expect(computeScore({ ...edited, now: day(14) }).score).toBe(1);
