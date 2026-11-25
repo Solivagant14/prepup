@@ -615,7 +615,7 @@ describe("topic links over MCP", () => {
     expect(found.text).toMatch(/^2 topic\(s\) match "vector"\./);
     expect(data(found.text).map((t: { term: string }) => t.term)).toEqual(["Vector databases", "Vector search"]);
     expect(found.text).not.toContain("nearest vectors");
-    expect(data(found.text)[1]).toMatchObject({ hasExplanation: true, score: 1 });
+    expect(data(found.text)[1]).toMatchObject({ hasExplanation: true, score: 0 });
     expect(data((await call(USER, "search_topics", { query: "vector", limit: 1 })).text)).toHaveLength(1);
     expect((await call(USER, "search_topics", { query: "kubernetes" })).text).toMatch(/^0 topic/);
     expect((await call(USER, "search_topics", { query: "" })).isError).toBe(true);

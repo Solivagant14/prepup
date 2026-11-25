@@ -14,6 +14,16 @@ export type Score = z.infer<typeof Score>;
 
 export const LEVEL_NAMES = ["Shaky", "Learning", "Getting there", "Confident", "Can explain"] as const;
 
+/**
+ * A topic that has never been tested or scored shows 0. Only a test or a
+ * manual edit gives it a stored score (1–5), and a score never fades below 1.
+ */
+export const UNTESTED_SCORE = 0;
+export const UNTESTED_LEVEL = "Not tested yet";
+/** The score a topic shows: 0 until its first test or manual edit, then 1–5. */
+export type ShownScore = typeof UNTESTED_SCORE | Score;
+export type LevelName = (typeof LEVEL_NAMES)[number] | typeof UNTESTED_LEVEL;
+
 /** How many topics one workspace may hold unless the host sets another cap. Matches the largest list page. */
 export const DEFAULT_MAX_TOPICS = 500;
 
@@ -53,7 +63,7 @@ export type AddTopicInput = z.infer<typeof AddTopicInput>;
 
 export const ListTopicsInput = z.object({
   filter: TopicFilter.default("all").describe(
-    "all = every topic; prep = weakest topics (score 1-2), most important first, with prerequisites ahead of what builds on them; fading_week = drops within 7 days; confident = score 4+",
+    "all = every topic; prep = weakest and untested topics (score 0-2), most important first, with prerequisites ahead of what builds on them; fading_week = drops within 7 days; confident = score 4+",
   ),
   limit: z.number().int().min(1).max(500).default(20),
 });
@@ -189,11 +199,12 @@ export interface TopicView {
   /** Who last wrote the explanation: you in the web app, or Claude after a test. */
   explanationBy: "you" | "claude" | null;
   explanationUpdatedAt: string | null;
-  score: Score;
-  level: (typeof LEVEL_NAMES)[number];
+  /** 0 until the first test or manual edit, then 1–5. */
+  score: ShownScore;
+  level: LevelName;
   createdAt: string;
   lastTestedAt: string | null;
-  /** Days until the score drops one step; null when it cannot drop (score 1). */
+  /** Days until the score drops one step; null when it cannot drop (score 0 or 1). */
   daysUntilDrop: number | null;
   fadingSoon: boolean;
   fadingThisWeek: boolean;

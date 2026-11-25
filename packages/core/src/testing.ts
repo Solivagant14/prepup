@@ -129,7 +129,7 @@ export function styleBlock(style: string): string {
 export function buildInstructions(style: string): string {
   return [
     "PrepUp tracks the topics the user is learning.",
-    "Each topic has a score from 1 to 5: 1-4 is how well they understand it and can answer questions; 5 means they can explain it clearly.",
+    "Each topic has a score from 1 to 5: 1-4 is how well they understand it and can answer questions; 5 means they can explain it clearly. A topic that has never been tested shows 0 (not tested yet); a test always records 1 to 5.",
     "Scores fade one step every 14 days unless the topic is tested again.",
     "",
     "Capturing: when the user mentions a term they want to learn, call add_topic. It is safe to call twice; duplicates merge.",

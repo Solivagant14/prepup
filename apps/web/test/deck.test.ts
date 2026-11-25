@@ -58,6 +58,7 @@ describe("cardLook", () => {
 
   it("switches to white text on dark cards", () => {
     expect(cardLook(topic({ score: 1 })).ink).toBe("#18181B");
+    expect(cardLook(topic({ score: 0, level: "Not tested yet" }))).toMatchObject({ background: "#F4F4F5", ink: "#18181B", countdown: null });
     expect(cardLook(topic({ score: 5, daysUntilDrop: 14 })).ink).toBe("#FFFFFF");
     expect(prefersLightText("#312E81")).toBe(true);
   });
@@ -65,6 +66,7 @@ describe("cardLook", () => {
 
 describe("filters and summary", () => {
   const deck = [
+    topic({ id: "n", importance: "medium", score: 0, level: "Not tested yet" }),
     topic({ id: "a", importance: "high", score: 1 }),
     topic({ id: "d", importance: "low", score: 2 }),
     topic({ id: "b", importance: "high", score: 4, daysUntilDrop: 5, fadingThisWeek: true }),
@@ -72,13 +74,16 @@ describe("filters and summary", () => {
   ];
 
   it("matches the four tabs", () => {
-    expect(deck.filter((t) => matches("prep", t)).map((t) => t.id)).toEqual(["a", "d"]);
+    expect(deck.filter((t) => matches("prep", t)).map((t) => t.id)).toEqual(["n", "a", "d"]);
     expect(deck.filter((t) => matches("fading_week", t)).map((t) => t.id)).toEqual(["b"]);
     expect(deck.filter((t) => matches("confident", t)).map((t) => t.id)).toEqual(["b", "c"]);
   });
 
   it("summarizes progress", () => {
-    expect(summarize(deck)).toMatchObject({ total: 4, confident: 2, confidentPct: 50, prep: 2, fadingWeek: 1 });
+    const s = summarize(deck);
+    expect(s).toMatchObject({ total: 5, confident: 2, confidentPct: 40, prep: 3, fadingWeek: 1 });
+    expect(s.byLevel.map((l) => l.count)).toEqual([1, 1, 1, 0, 1, 1]);
+    expect(s.byLevel[0]!.name).toBe("Not tested yet");
     expect(summarize([]).confidentPct).toBe(0);
   });
 
@@ -86,6 +91,7 @@ describe("filters and summary", () => {
     expect(freshnessText(topic({ score: 4, daysUntilDrop: 10 }))).toBe("Fresh for 10 more days");
     expect(freshnessText(topic({ score: 4, daysUntilDrop: 1, fadingSoon: true }))).toBe("Drops to Getting there in 1 day");
     expect(freshnessText(topic({ score: 1 }))).toBeNull();
+    expect(freshnessText(topic({ score: 0, level: "Not tested yet" }))).toBeNull();
   });
 });
 

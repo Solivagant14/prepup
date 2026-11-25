@@ -30,11 +30,13 @@ describe("PrepUpService", () => {
     expect(await service.listTopics(me)).toHaveLength(1);
   });
 
-  it("starts new topics at Shaky with medium importance", async () => {
+  it("starts new topics at 0 (not tested yet) with medium importance", async () => {
     const { service } = setup();
     const me = await service.resolveActor("user-1");
     const { topic } = await service.addTopic(me, { term: "RAG", sourceUrl: "https://youtube.com/watch?v=x" });
-    expect(topic).toMatchObject({ score: 1, level: "Shaky", importance: "medium", daysUntilDrop: null });
+    expect(topic).toMatchObject({ score: 0, level: "Not tested yet", importance: "medium", daysUntilDrop: null });
+    // The first score, from a test or a manual edit, replaces the 0.
+    expect(await service.setScore(me, topic.id, { score: 1 }, "web")).toMatchObject({ score: 1, level: "Shaky" });
   });
 
   it("rejects invalid input with a readable message", async () => {
@@ -135,7 +137,7 @@ describe("PrepUpService", () => {
 
     // Capturing it again starts fresh.
     const again = await service.addTopic(alice, { term: "rag" });
-    expect(again).toMatchObject({ created: true, topic: { score: 1 } });
+    expect(again).toMatchObject({ created: true, topic: { score: 0 } });
   });
 
   it("deletes by term only when the user's confirmation is passed", async () => {
