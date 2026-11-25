@@ -458,7 +458,7 @@ describe("the decks migration", () => {
     // Build the database as it was before decks, with data in it, then run the decks migration on top.
     const before = mkdtempSync(`${tmpdir()}/prepup-migrations-`);
     mkdirSync(`${before}/meta`);
-    const kept = journal.entries.filter((e) => e.tag !== "0006_decks");
+    const kept = journal.entries.slice(0, journal.entries.findIndex((e) => e.tag === "0006_decks"));
     for (const e of kept) copyFileSync(`${migrationsFolder}/${e.tag}.sql`, `${before}/${e.tag}.sql`);
     writeFileSync(`${before}/meta/_journal.json`, JSON.stringify({ ...journal, entries: kept }));
     await migrate(pg, { migrationsFolder: before });
