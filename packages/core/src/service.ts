@@ -77,7 +77,8 @@ const SIMILAR_MIN_LENGTH = 3;
 
 const byTerm = (a: TopicRef, b: TopicRef) => a.term.localeCompare(b.term);
 const deckList = (decks: { name: string }[]) => decks.map((d) => `"${d.name}"`).join(", ");
-const byCreated = (a: DeckRecord, b: DeckRecord) => a.createdAt.getTime() - b.createdAt.getTime() || a.name.localeCompare(b.name);
+/** Oldest first; decks made in the same instant keep the order they were saved in. */
+const byCreated = (a: DeckRecord, b: DeckRecord) => a.createdAt.getTime() - b.createdAt.getTime();
 const NO_LINKS: TopicLinks = { buildsOn: [], neededFor: [] };
 
 export class PrepUpService {
@@ -107,7 +108,7 @@ export class PrepUpService {
       (t) => t.deckId === deck.id,
     );
     if (!existing && (await this.repo.countTopics(actor.workspaceId)) >= this.limits.maxTopics) {
-      throw new DomainError("rule", `You have the most topics PrepUp allows (${this.limits.maxTopics}). Delete one to add another.`);
+      throw new DomainError("rule", `You have ${this.limits.maxTopics} topics, the most PrepUp allows. Delete one to add another.`);
     }
     const { record, created } = await this.repo.insertTopicIfAbsent({
       workspaceId: actor.workspaceId,

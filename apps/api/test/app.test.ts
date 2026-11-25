@@ -198,7 +198,7 @@ describe("hardening", () => {
     expect((await add("RAG")).status).toBe(201);
     const full = await add("MCP");
     expect(full.status).toBe(422);
-    expect(await full.json()).toMatchObject({ error: "rule", message: expect.stringContaining("most topics PrepUp allows") });
+    expect(await full.json()).toMatchObject({ error: "rule", message: expect.stringContaining("the most PrepUp allows") });
   });
 
   it("deletes the signed-in user's data and only theirs", async () => {
@@ -651,7 +651,7 @@ describe("topic links over MCP", () => {
       capabilities: {},
       clientInfo: { name: "test", version: "1" },
     });
-    expect(init.result.serverInfo.version).toBe("0.5.0");
+    expect(init.result.serverInfo.version).toBe("0.6.0");
     expect(init.result.instructions).toMatch(/call link_topics only after they say yes/);
     expect(init.result.instructions).toMatch(/builds on is weaker, test that prerequisite first/);
   });
@@ -660,9 +660,11 @@ describe("topic links over MCP", () => {
 describe("MCP error handling", () => {
   it("hides unexpected errors from the client", async () => {
     const broken = new PrepUpService(new InMemoryRepository());
-    broken.listTopics = async () => {
+    const leak = async (): Promise<never> => {
       throw new Error("select * from secrets where id = 42");
     };
+    broken.listTopics = leak;
+    broken.listDecks = leak;
     const app2 = createApp({ service: broken, auth: new DevAuthenticator(), publicUrl: PUBLIC_URL });
     const res = await app2.request(
       "/mcp",

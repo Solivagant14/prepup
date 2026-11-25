@@ -77,7 +77,7 @@ export class PostgresRepository implements PrepUpRepository {
   }
 
   async listDecks(workspaceId: string): Promise<DeckRecord[]> {
-    return this.db.select().from(decks).where(eq(decks.workspaceId, workspaceId));
+    return this.db.select().from(decks).where(eq(decks.workspaceId, workspaceId)).orderBy(decks.createdAt);
   }
 
   async insertDeckIfAbsent(deck: Omit<DeckRecord, "id">) {

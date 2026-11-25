@@ -705,7 +705,7 @@ function Troubleshooting({ links }: PageProps) {
             and carry on. The numbers are on the <Link to={PATHS.costs}>costs page</Link>.
           </p>
         </Problem>
-        <Problem title="“You have the most topics PrepUp allows”">
+        <Problem title="“…topics, the most PrepUp allows”">
           <p>
             Each person can hold a fixed number of topics across all their decks, shown on the{" "}
             <Link to={PATHS.costs}>costs page</Link>. Delete a topic you no longer need to add another.
