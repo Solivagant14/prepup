@@ -3,6 +3,8 @@
  * in-process Postgres, so these tests need no Docker or network.
  */
 import { randomUUID } from "node:crypto";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { PrepUpService } from "@prepup/core";
@@ -443,5 +445,51 @@ describe("PostgresRateLimitStore", () => {
     const at = new Date("2026-11-01T09:00:00Z");
     const counts = await Promise.all(Array.from({ length: 10 }, () => store.hit(user, at)));
     expect(counts.map((c) => c.minute).sort((x, y) => x - y)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
+describe("the decks migration", () => {
+  it("moves existing topics, with their history and links, into one deck per person", async () => {
+    const client = new PGlite();
+    const pg = drizzle(client, { schema });
+    const journal = JSON.parse(readFileSync(`${migrationsFolder}/meta/_journal.json`, "utf8")) as {
+      entries: Array<{ tag: string }>;
+    };
+    // Build the database as it was before decks, with data in it, then run the decks migration on top.
+    const before = mkdtempSync(`${tmpdir()}/prepup-migrations-`);
+    mkdirSync(`${before}/meta`);
+    const kept = journal.entries.filter((e) => e.tag !== "0006_decks");
+    for (const e of kept) copyFileSync(`${migrationsFolder}/${e.tag}.sql`, `${before}/${e.tag}.sql`);
+    writeFileSync(`${before}/meta/_journal.json`, JSON.stringify({ ...journal, entries: kept }));
+    await migrate(pg, { migrationsFolder: before });
+
+    const [alice, bob] = [randomUUID(), randomUUID()];
+    const raw = (q: string) => client.query<Record<string, unknown>>(q);
+    const ws = async (owner: string) =>
+      (await raw(`insert into workspaces (name, owner_id) values ('Personal', '${owner}') returning id`)).rows[0]!.id as string;
+    const [wa, wb] = [await ws(alice), await ws(bob)];
+    const topic = async (w: string, owner: string, term: string) =>
+      (
+        await raw(
+          `insert into topics (workspace_id, term, normalized_term, created_by) values ('${w}', '${term}', '${term.toLowerCase()}', '${owner}') returning id`,
+        )
+      ).rows[0]!.id as string;
+    const rag = await topic(wa, alice, "RAG");
+    const emb = await topic(wa, alice, "Embeddings");
+    await raw(`insert into topic_links (workspace_id, topic_id, builds_on_id, created_by) values ('${wa}', '${rag}', '${emb}', '${alice}')`);
+    await raw(
+      `insert into review_events (workspace_id, topic_id, user_id, kind, score, source) values ('${wa}', '${rag}', '${alice}', 'claude_test', 3, 'mcp')`,
+    );
+    void wb; // Bob has a workspace but no topics: he gets no deck until he first uses one.
+
+    await migrate(pg, { migrationsFolder });
+    const migrated = new PrepUpService(new PostgresRepository(pg as unknown as Db), () => now);
+    const a = await migrated.resolveActor(alice);
+    expect(await migrated.listDecks(a)).toMatchObject([{ name: "My deck", topicCount: 2 }]);
+    const ragView = await migrated.findByTerm(a, "RAG");
+    expect(ragView).toMatchObject({ score: 3, deck: { name: "My deck" }, buildsOn: [{ term: "Embeddings" }] });
+    expect((await raw(`select count(*)::int as n from decks where workspace_id = '${wb}'`)).rows[0]!.n).toBe(0);
+    // A new topic with the same deck name lands in the migrated deck, not a second "My deck".
+    expect((await migrated.addTopic(a, { term: "Agents" })).topic.deck.id).toBe(ragView.deck.id);
   });
 });
