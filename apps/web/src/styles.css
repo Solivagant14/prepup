@@ -560,3 +560,19 @@ details.more > :not(summary) { margin: 0 24px 22px; }
 
 /* The whole screen given to one message, when PrepUp can't start. */
 .app-error { min-height: 100dvh; display: grid; place-items: center; margin: 0; padding: 16px; text-align: center; }
+
+/* Decks: the row of decks above the deck page, and the deck label on a card. */
+.deck-bar { display: flex; flex-direction: column; gap: 10px; }
+.deck-tabs { gap: 6px; }
+.deck-tabs .tab { border: 1px solid var(--line); background: var(--surface); }
+.deck-tabs .tab[aria-selected="true"] { border-color: var(--btn); }
+.deck-tabs .deck-new { border-style: dashed; color: var(--muted); }
+.deck-tabs .deck-new:hover { color: var(--ink); }
+.deck-actions { display: flex; gap: 12px; margin-top: -6px; }
+.link-btn.danger { color: var(--rose); }
+.deck-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.deck-form input { flex: 1 1 220px; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.deck-ask { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.capture select { flex: none; max-width: 40%; height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 14px; }
+.card-deck { font-size: 11px; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.7; margin-bottom: -6px; }
+.deck-select { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }

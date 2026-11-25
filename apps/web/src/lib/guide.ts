@@ -18,6 +18,7 @@ export const GUIDE: GuidePage[] = [
   { slug: "connect", title: "Connect your assistant", group: "Get started", summary: "Steps for Claude, ChatGPT, Cursor, VS Code or any other MCP app." },
   { slug: "first-test", title: "Your first test", group: "Get started", summary: "What to say, what happens, and what gets saved." },
   { slug: "scores", title: "Scores and fading", group: "Using PrepUp", summary: "What 1 to 5 mean, and why a score drops when you leave it alone." },
+  { slug: "decks", title: "Decks", group: "Using PrepUp", summary: "Group topics by subject, like DSA or System Design." },
   { slug: "links", title: "Linking topics", group: "Using PrepUp", summary: "Topics that build on each other, and the graph view." },
   { slug: "assistant", title: "What your assistant does", group: "Using PrepUp", summary: "What it can read or change, and what never happens without your yes." },
   { slug: "troubleshooting", title: "Troubleshooting", group: "Help", summary: "It won't connect, the deck is empty, the testing style is ignored." },
@@ -72,4 +73,6 @@ export const PHRASES = {
   fading: "Test me on what's fading this week",
   add: "Add vector databases to PrepUp",
   link: "What does RAG build on? Link them in PrepUp",
+  deck: "Make a DSA deck in PrepUp and add Arrays and Strings to it",
+  testDeck: "Test me on my DSA deck",
 } as const;

@@ -198,7 +198,7 @@ describe("hardening", () => {
     expect((await add("RAG")).status).toBe(201);
     const full = await add("MCP");
     expect(full.status).toBe(422);
-    expect(await full.json()).toMatchObject({ error: "rule", message: expect.stringContaining("deck is full") });
+    expect(await full.json()).toMatchObject({ error: "rule", message: expect.stringContaining("most topics PrepUp allows") });
   });
 
   it("deletes the signed-in user's data and only theirs", async () => {
@@ -337,11 +337,16 @@ describe("MCP", () => {
     const tools = await mcp(USER, "tools/list");
     expect(tools.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
       "add_topic",
+      "create_deck",
+      "delete_deck",
       "delete_topic",
       "get_topic",
       "link_topics",
+      "list_decks",
       "list_topics",
+      "move_topic",
       "record_review",
+      "rename_deck",
       "search_topics",
       "unlink_topics",
       "whoami",
@@ -830,5 +835,72 @@ describe("public costs page", () => {
     expect(() => loadConfig({ ...base, SUPPORT_URL: "javascript:alert(1)" })).toThrow(/SUPPORT_URL/);
     expect(() => loadConfig({ ...base, SUPPORT_URL: "http://example.com" })).toThrow(/SUPPORT_URL/);
     expect(() => loadConfig({ ...base, HOSTING_COST_PER_MONTH: "-1" })).toThrow(/HOSTING_COST_PER_MONTH/);
+  });
+});
+
+describe("decks", () => {
+  const call = async (user: string, name: string, args: Record<string, unknown>) => {
+    const res = await mcp(user, "tools/call", { name, arguments: args });
+    return { text: (res.result?.content?.[0]?.text ?? "") as string, isError: Boolean(res.result?.isError ?? res.error) };
+  };
+  const data = (text: string) => JSON.parse(text.slice(text.indexOf("\n\n") + 2));
+
+  it("lets an assistant make decks, add to them, and asks which deck when unclear", async () => {
+    expect((await call(USER, "add_topic", { term: "RAG" })).text).toContain('to the deck "My deck"');
+    expect((await call(USER, "create_deck", { name: "DSA" })).text).toBe('Created the deck "DSA".\n\n{\n  "name": "DSA",\n  "topics": 0\n}');
+    const unclear = await call(USER, "add_topic", { term: "Arrays" });
+    expect(unclear).toMatchObject({ isError: true, text: expect.stringContaining("Ask which deck") });
+    expect((await call(USER, "add_topic", { term: "Arrays", deck: "DSA" })).text).toContain('"DSA"');
+    await call(USER, "add_topic", { term: "Hashing", deck: "DSA" });
+    await call(USER, "add_topic", { term: "Hashing", deck: "My deck" });
+
+    expect((await call(USER, "get_topic", { term: "Hashing" })).text).toMatch(/is in 2 decks/);
+    expect((await call(USER, "get_topic", { term: "Hashing", deck: "DSA" })).text).toContain('(deck "DSA")');
+    expect(data((await call(USER, "list_topics", { deck: "DSA" })).text).map((t: { term: string }) => t.term).sort()).toEqual([
+      "Arrays",
+      "Hashing",
+    ]);
+    expect(data((await call(USER, "list_decks", {})).text)).toEqual([
+      { name: "My deck", topics: 2 },
+      { name: "DSA", topics: 2 },
+    ]);
+    const who = await call(USER, "whoami", {});
+    expect(who.text).toContain("4 topic(s) in 2 deck(s)");
+
+    const moved = await call(USER, "move_topic", { term: "RAG", toDeck: "DSA" });
+    expect(moved.text).toContain('Moved "RAG" from "My deck" to "DSA"');
+    expect((await call(USER, "rename_deck", { deck: "DSA", newName: "Algorithms" })).text).toContain('to "Algorithms"');
+
+    expect((await call(USER, "delete_deck", { deck: "Algorithms" })).isError).toBe(true);
+    expect((await call(USER, "delete_deck", { deck: "Algorithms", confirmed: true })).text).toContain("and its 3 topic(s)");
+    expect(data((await call(USER, "list_decks", {})).text)).toEqual([{ name: "My deck", topics: 1 }]);
+    // Another person's decks are out of reach.
+    expect((await call(OTHER, "delete_deck", { deck: "My deck", confirmed: true })).text).toContain("and its 0 topic(s)");
+    expect(data((await call(USER, "list_decks", {})).text)).toEqual([{ name: "My deck", topics: 1 }]);
+  });
+
+  it("serves decks to the web app", async () => {
+    const post = (path: string, body: unknown) => app.request(path, as(USER, { method: "POST", body: JSON.stringify(body) }));
+    const created = await post("/api/decks", { name: "DSA" });
+    expect(created.status).toBe(201);
+    const dsa = (await created.json()) as { id: string };
+    expect((await post("/api/decks", { name: "dsa" })).status).toBe(200);
+    const topic = (await (await post("/api/topics", { term: "Arrays", deckId: dsa.id })).json()) as { id: string; deck: { name: string } };
+    expect(topic.deck.name).toBe("DSA");
+    const decks = (await (await app.request("/api/decks", as(USER))).json()) as Array<{ name: string; topicCount: number }>;
+    expect(decks.map((d) => [d.name, d.topicCount])).toEqual([["DSA", 1]]);
+
+    const other = (await (await post("/api/decks", { name: "Systems" })).json()) as { id: string };
+    const move = await app.request(`/api/topics/${topic.id}/deck`, as(USER, { method: "PUT", body: JSON.stringify({ deckId: other.id }) }));
+    expect(await move.json()).toMatchObject({ topic: { deck: { name: "Systems" } }, removedLinks: 0 });
+    const listed = await app.request(`/api/topics?deckId=${other.id}`, as(USER));
+    expect(((await listed.json()) as unknown[]).length).toBe(1);
+
+    const renamed = await app.request(`/api/decks/${dsa.id}`, as(USER, { method: "PATCH", body: JSON.stringify({ name: "Algorithms" }) }));
+    expect(await renamed.json()).toMatchObject({ name: "Algorithms", topicCount: 0 });
+    expect((await app.request(`/api/decks/${dsa.id}`, as(OTHER, { method: "DELETE" }))).status).toBe(404);
+    expect(await (await app.request(`/api/decks/${other.id}`, as(USER, { method: "DELETE" }))).json()).toEqual({
+      deleted: { name: "Systems", topicCount: 1 },
+    });
   });
 });

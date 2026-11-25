@@ -9,7 +9,7 @@ const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.m
 
 describe("the guide's contents", () => {
   it("has eight pages, each with its own address", () => {
-    expect(GUIDE).toHaveLength(8);
+    expect(GUIDE).toHaveLength(9);
     expect(new Set(GUIDE.map((p) => p.slug)).size).toBe(GUIDE.length);
     for (const p of GUIDE) {
       expect(p.slug).toMatch(/^[a-z-]+$/);

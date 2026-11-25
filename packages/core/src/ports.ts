@@ -6,9 +6,20 @@
 import type { EventKind, EventSource, HostUsage, Importance, Score, TopicRef } from "@prepup/contracts";
 import type { LinkPair } from "./links.js";
 
+/** A named group of topics, like "DSA". Every topic is in exactly one deck. */
+export interface DeckRecord {
+  id: string;
+  workspaceId: string;
+  name: string;
+  normalizedName: string;
+  createdBy: string;
+  createdAt: Date;
+}
+
 export interface TopicRecord {
   id: string;
   workspaceId: string;
+  deckId: string;
   term: string;
   normalizedTerm: string;
   sourceUrl: string | null;
@@ -76,9 +87,25 @@ export interface PrepUpRepository {
   /** Returns the user's personal workspace id, creating it on first use. */
   ensurePersonalWorkspace(userId: string, now: Date): Promise<string>;
 
-  /** Inserts the topic unless one with the same normalized term exists; never duplicates, even under races. */
+  /** Every deck in the workspace. */
+  listDecks(workspaceId: string): Promise<DeckRecord[]>;
+  /** Inserts the deck unless one with the same normalized name exists; never duplicates, even under races. */
+  insertDeckIfAbsent(deck: Omit<DeckRecord, "id">): Promise<{ record: DeckRecord; created: boolean }>;
+  /** Renames a deck. Returns false if it isn't in this workspace. The caller checks the new name is free. */
+  renameDeck(workspaceId: string, deckId: string, name: string, normalizedName: string): Promise<boolean>;
+  /** Deletes the deck with every topic in it (and their settings, history and links). Returns false if it isn't in this workspace. */
+  deleteDeck(workspaceId: string, deckId: string): Promise<boolean>;
+
+  /** Inserts the topic unless the deck already has one with the same normalized term; never duplicates, even under races. */
   insertTopicIfAbsent(topic: Omit<TopicRecord, "id">): Promise<{ record: TopicRecord; created: boolean }>;
-  findTopicByNormalizedTerm(workspaceId: string, normalizedTerm: string): Promise<TopicRecord | null>;
+  /** Every topic with this normalized term, in any deck of the workspace. */
+  findTopicsByNormalizedTerm(workspaceId: string, normalizedTerm: string): Promise<TopicRecord[]>;
+  /**
+   * Moves a topic to another deck of the same workspace and removes its links,
+   * as one unit of work (links stay inside one deck). Returns false if the
+   * topic or deck isn't in this workspace. The caller checks the term is free there.
+   */
+  moveTopic(workspaceId: string, topicId: string, deckId: string): Promise<boolean>;
 
   countTopics(workspaceId: string): Promise<number>;
 

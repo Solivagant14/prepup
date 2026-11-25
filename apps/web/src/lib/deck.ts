@@ -89,6 +89,15 @@ export const linkPairs = (topics: TopicView[]): LinkPair[] =>
   topics.flatMap((t) => t.buildsOn.map((p) => ({ topicId: t.id, buildsOnId: p.id })));
 
 /** The cards a tab shows, in order. Prep now puts prerequisites ahead of what builds on them, as the server does. */
+/** Which deck the page shows: one deck's id, or every deck. */
+export const ALL_DECKS = "all";
+export type DeckChoice = typeof ALL_DECKS | string;
+
+/** The topics in the chosen deck, or every topic. */
+export function inDeck(choice: DeckChoice, topics: TopicView[]): TopicView[] {
+  return choice === ALL_DECKS ? topics : topics.filter((t) => t.deck.id === choice);
+}
+
 export function shownIn(tab: Tab, topics: TopicView[]): TopicView[] {
   const shown = topics.filter(MATCH[tab]);
   return tab === "prep" ? prerequisitesFirst(shown, linkPairs(topics)) : shown;

@@ -5,18 +5,28 @@
  */
 import {
   AddTopicInput,
+  CreateDeckInput,
+  DEFAULT_DECK_NAME,
   DEFAULT_MAX_TOPICS,
+  DeleteDeckInput,
   DeleteTopicInput,
   LinkTopicInput,
   LinkTopicsInput,
   ListTopicsInput,
+  MAX_DECKS,
   MAX_PREREQUISITES,
+  MoveTopicByNameInput,
+  MoveTopicInput,
   RecordReviewInput,
+  RenameDeckByNameInput,
+  RenameDeckInput,
   SearchTopicsInput,
   SetScoreInput,
   SIMILAR_TOPICS_LIMIT,
   UpdateSettingsInput,
   UpdateTopicInput,
+  type DeckRef,
+  type DeckView,
   type EventSource,
   type HostUsage,
   type ReviewEventView,
@@ -29,7 +39,7 @@ import type { z } from "zod";
 import { DomainError } from "./errors.js";
 import { loopPath, prerequisitesFirst, type LinkPair } from "./links.js";
 import { bestMatches } from "./matching.js";
-import type { NewEvent, PrepUpRepository, TopicLinks, TopicState } from "./ports.js";
+import type { DeckRecord, NewEvent, PrepUpRepository, TopicLinks, TopicRecord, TopicState } from "./ports.js";
 import { computeScore, levelName, normalizeTerm, priority } from "./scoring.js";
 import { DEFAULT_TESTING_STYLE, presetOf } from "./testing.js";
 
@@ -66,6 +76,8 @@ const FILTERS: Record<TopicFilter, (t: TopicView) => boolean> = {
 const SIMILAR_MIN_LENGTH = 3;
 
 const byTerm = (a: TopicRef, b: TopicRef) => a.term.localeCompare(b.term);
+const deckList = (decks: { name: string }[]) => decks.map((d) => `"${d.name}"`).join(", ");
+const byCreated = (a: DeckRecord, b: DeckRecord) => a.createdAt.getTime() - b.createdAt.getTime() || a.name.localeCompare(b.name);
 const NO_LINKS: TopicLinks = { buildsOn: [], neededFor: [] };
 
 export class PrepUpService {
@@ -86,23 +98,30 @@ export class PrepUpService {
    * propose "builds on" links from them. Nothing is linked here.
    */
   async addTopic(actor: Actor, input: unknown): Promise<{ topic: TopicView; created: boolean; similar: TopicRef[] }> {
-    const { term, sourceUrl } = parse(AddTopicInput, input);
+    const { term, sourceUrl, deck: deckName, deckId } = parse(AddTopicInput, input);
     const now = this.clock();
     const normalizedTerm = normalizeTerm(term);
+    const deck = await this.targetDeck(actor, deckName, deckId);
     // The cap only stops new topics: capturing one you already have still returns it.
-    const existing = await this.repo.findTopicByNormalizedTerm(actor.workspaceId, normalizedTerm);
+    const existing = (await this.repo.findTopicsByNormalizedTerm(actor.workspaceId, normalizedTerm)).find(
+      (t) => t.deckId === deck.id,
+    );
     if (!existing && (await this.repo.countTopics(actor.workspaceId)) >= this.limits.maxTopics) {
-      throw new DomainError("rule", `Your deck is full (${this.limits.maxTopics} topics). Delete one to add another.`);
+      throw new DomainError("rule", `You have the most topics PrepUp allows (${this.limits.maxTopics}). Delete one to add another.`);
     }
     const { record, created } = await this.repo.insertTopicIfAbsent({
       workspaceId: actor.workspaceId,
+      deckId: deck.id,
       term,
       normalizedTerm,
       sourceUrl: sourceUrl ?? null,
       createdBy: actor.userId,
       createdAt: now,
     });
-    const others = (await this.repo.listTopicRecords(actor.workspaceId)).filter((t) => t.id !== record.id);
+    // Links stay inside one deck, so only this deck's topics are worth proposing.
+    const others = (await this.repo.listTopicRecords(actor.workspaceId)).filter(
+      (t) => t.id !== record.id && t.deckId === record.deckId,
+    );
     const similar = bestMatches(record.term, others, SIMILAR_TOPICS_LIMIT, SIMILAR_MIN_LENGTH);
     return {
       topic: await this.view(actor, record.id),
@@ -117,31 +136,63 @@ export class PrepUpService {
    * then the topic. Other filters keep plain priority order.
    */
   async listTopics(actor: Actor, input: unknown = {}): Promise<TopicView[]> {
-    const { filter, limit } = parse(ListTopicsInput, input);
+    const { filter, limit, deck, deckId } = parse(ListTopicsInput, input);
+    const only = await this.deckFilter(actor, deck, deckId);
     const { views, links } = await this.allViews(actor);
-    const shown = views.filter(FILTERS[filter]);
+    const shown = views.filter((v) => (!only || v.deck.id === only.id) && FILTERS[filter](v));
     return (filter === "prep" ? prerequisitesFirst(shown, links) : shown).slice(0, limit);
   }
 
   /** Finds topics by text, for decks too big to list. Best match first. */
   async searchTopics(actor: Actor, input: unknown): Promise<TopicView[]> {
-    const { query, limit } = parse(SearchTopicsInput, input);
+    const { query, limit, deck } = parse(SearchTopicsInput, input);
+    const only = await this.deckFilter(actor, deck);
     const { views } = await this.allViews(actor);
-    return bestMatches(query, views, limit, 1);
+    return bestMatches(
+      query,
+      views.filter((v) => !only || v.deck.id === only.id),
+      limit,
+      1,
+    );
   }
 
   async getTopic(actor: Actor, topicId: string): Promise<TopicView> {
     return this.view(actor, topicId);
   }
 
-  async findByTerm(actor: Actor, term: string): Promise<TopicView> {
-    return this.view(actor, (await this.recordByTerm(actor, term)).id);
+  /** A topic by its term, as an assistant names it. `deck` (a name) picks one when the term is in several decks. */
+  async findByTerm(actor: Actor, term: string, deck?: string): Promise<TopicView> {
+    return this.view(actor, (await this.recordByTerm(actor, term, deck)).id);
   }
 
-  private async recordByTerm(actor: Actor, term: string) {
-    const record = await this.repo.findTopicByNormalizedTerm(actor.workspaceId, normalizeTerm(term));
-    if (!record) throw new DomainError("not_found", `No topic called "${term}" in PrepUp`);
-    return record;
+  private async recordByTerm(actor: Actor, term: string, deckName?: string): Promise<TopicRecord> {
+    const deck = deckName === undefined ? undefined : await this.deckByName(actor, deckName);
+    const found = (await this.repo.findTopicsByNormalizedTerm(actor.workspaceId, normalizeTerm(term))).filter(
+      (t) => !deck || t.deckId === deck.id,
+    );
+    if (found.length === 0) {
+      throw new DomainError("not_found", deck ? `No topic called "${term}" in the deck "${deck.name}"` : `No topic called "${term}" in PrepUp`);
+    }
+    if (found.length > 1) {
+      const decks = (await this.repo.listDecks(actor.workspaceId)).filter((d) => found.some((t) => t.deckId === d.id));
+      throw new DomainError(
+        "rule",
+        `"${term}" is in ${found.length} decks: ${deckList(decks)}. Ask the user which deck they mean, then pass it as deck.`,
+      );
+    }
+    return found[0]!;
+  }
+
+  /** The prerequisite of a link named by terms: it must be in the same deck as the topic. */
+  private async prerequisiteByTerm(actor: Actor, term: string, deckId: string): Promise<TopicRecord> {
+    const found = await this.repo.findTopicsByNormalizedTerm(actor.workspaceId, normalizeTerm(term));
+    const same = found.find((t) => t.deckId === deckId);
+    if (same) return same;
+    const deck = (await this.repo.listDecks(actor.workspaceId)).find((d) => d.id === deckId);
+    if (found.length > 0) {
+      throw new DomainError("rule", `"${term}" isn't in the deck "${deck?.name}". Links stay inside one deck.`);
+    }
+    throw new DomainError("not_found", `No topic called "${term}" in PrepUp`);
   }
 
   /**
@@ -151,11 +202,11 @@ export class PrepUpService {
    * saved in one transaction.
    */
   async recordReview(actor: Actor, input: unknown): Promise<TopicView> {
-    const { term, score, explained, feedback, answer, explanation } = parse(RecordReviewInput, input);
+    const { term, deck, score, explained, feedback, answer, explanation } = parse(RecordReviewInput, input);
     if (score === 5 && !explained) {
       throw new DomainError("rule", "A score of 5 requires that the user explained the topic clearly (explained: true)");
     }
-    const topic = await this.findByTerm(actor, term);
+    const topic = await this.findByTerm(actor, term, deck);
     const now = this.clock();
     const event = this.event(actor, topic.id, "mcp", now);
     const events: NewEvent[] = [{ ...event, kind: "claude_test", score, explained, feedback, text: answer ?? null }];
@@ -206,6 +257,12 @@ export class PrepUpService {
     if (topicId === buildsOnId) {
       throw new DomainError("rule", `"${topic.topic.term}" can't build on itself.`);
     }
+    if (topic.topic.deckId !== prerequisite.topic.deckId) {
+      throw new DomainError(
+        "rule",
+        `"${topic.topic.term}" and "${prerequisite.topic.term}" are in different decks. Links stay inside one deck.`,
+      );
+    }
     const created = await this.repo.insertLinkIfAbsent(
       { workspaceId: actor.workspaceId, topicId, buildsOnId, createdBy: actor.userId, createdAt: this.clock() },
       (existing) => this.checkLink(existing, topic.topic.term, prerequisite.topic.term, topicId, buildsOnId),
@@ -222,15 +279,17 @@ export class PrepUpService {
 
   /** The same two calls by term, as Claude makes them. */
   async linkTopicsByTerm(actor: Actor, input: unknown) {
-    const { term, buildsOnTerm } = parse(LinkTopicsInput, input);
-    const [topic, prerequisite] = [await this.recordByTerm(actor, term), await this.recordByTerm(actor, buildsOnTerm)];
+    const { term, buildsOnTerm, deck } = parse(LinkTopicsInput, input);
+    const topic = await this.recordByTerm(actor, term, deck);
+    const prerequisite = await this.prerequisiteByTerm(actor, buildsOnTerm, topic.deckId);
     const result = await this.linkTopics(actor, topic.id, { buildsOnId: prerequisite.id });
     return { ...result, buildsOn: { id: prerequisite.id, term: prerequisite.term } };
   }
 
   async unlinkTopicsByTerm(actor: Actor, input: unknown) {
-    const { term, buildsOnTerm } = parse(LinkTopicsInput, input);
-    const [topic, prerequisite] = [await this.recordByTerm(actor, term), await this.recordByTerm(actor, buildsOnTerm)];
+    const { term, buildsOnTerm, deck } = parse(LinkTopicsInput, input);
+    const topic = await this.recordByTerm(actor, term, deck);
+    const prerequisite = await this.prerequisiteByTerm(actor, buildsOnTerm, topic.deckId);
     const result = await this.unlinkTopics(actor, topic.id, prerequisite.id);
     return { ...result, buildsOn: { id: prerequisite.id, term: prerequisite.term } };
   }
@@ -263,8 +322,147 @@ export class PrepUpService {
 
   /** The same delete by term, as an assistant makes it. It needs the user's confirmation, passed as `confirmed: true`. */
   async deleteTopicByTerm(actor: Actor, input: unknown): Promise<{ term: string }> {
-    const { term } = parse(DeleteTopicInput, input);
-    return this.deleteTopic(actor, (await this.recordByTerm(actor, term)).id);
+    const { term, deck } = parse(DeleteTopicInput, input);
+    return this.deleteTopic(actor, (await this.recordByTerm(actor, term, deck)).id);
+  }
+
+  /**
+   * Moves a topic to another deck. Its score, history and explanation go with
+   * it; its links are removed, because links stay inside one deck.
+   */
+  async moveTopic(actor: Actor, topicId: string, input: unknown): Promise<{ topic: TopicView; from: DeckRef; removedLinks: number }> {
+    const { deckId } = parse(MoveTopicInput, input);
+    const before = await this.view(actor, topicId);
+    const to = await this.deckById(actor, deckId);
+    if (before.deck.id === to.id) return { topic: before, from: before.deck, removedLinks: 0 };
+    const clash = (await this.repo.findTopicsByNormalizedTerm(actor.workspaceId, normalizeTerm(before.term))).some(
+      (t) => t.deckId === to.id,
+    );
+    if (clash) {
+      throw new DomainError("rule", `The deck "${to.name}" already has "${before.term}". Delete one of them, or rename the deck.`);
+    }
+    if (!(await this.repo.moveTopic(actor.workspaceId, topicId, to.id))) throw new DomainError("not_found", "Topic not found");
+    return {
+      topic: await this.view(actor, topicId),
+      from: before.deck,
+      removedLinks: before.buildsOn.length + before.neededFor.length,
+    };
+  }
+
+  /** The same move by names, as an assistant asks. */
+  async moveTopicByName(actor: Actor, input: unknown) {
+    const { term, deck, toDeck } = parse(MoveTopicByNameInput, input);
+    const topic = await this.recordByTerm(actor, term, deck);
+    const to = await this.deckByName(actor, toDeck);
+    return this.moveTopic(actor, topic.id, { deckId: to.id });
+  }
+
+  /** Every deck, oldest first, with how many topics each holds. Someone with no deck yet gets the default one. */
+  async listDecks(actor: Actor): Promise<DeckView[]> {
+    const decks = await this.decksOf(actor);
+    const topics = await this.repo.listTopicRecords(actor.workspaceId);
+    return decks.map((d) => deckView(d, topics.filter((t) => t.deckId === d.id).length));
+  }
+
+  /** Idempotent: creating a deck that already exists (even spelled differently) returns it. */
+  async createDeck(actor: Actor, input: unknown): Promise<{ deck: DeckView; created: boolean }> {
+    const { name } = parse(CreateDeckInput, input);
+    const normalizedName = normalizeTerm(name);
+    const decks = await this.repo.listDecks(actor.workspaceId);
+    const existing = decks.find((d) => d.normalizedName === normalizedName);
+    if (!existing && decks.length >= MAX_DECKS) {
+      throw new DomainError("rule", `You have the most decks PrepUp allows (${MAX_DECKS}). Delete one to add another.`);
+    }
+    const { record, created } = await this.repo.insertDeckIfAbsent({
+      workspaceId: actor.workspaceId,
+      name,
+      normalizedName,
+      createdBy: actor.userId,
+      createdAt: this.clock(),
+    });
+    return { deck: await this.deckViewOf(actor, record), created };
+  }
+
+  async renameDeck(actor: Actor, deckId: string, input: unknown): Promise<DeckView> {
+    const { name } = parse(RenameDeckInput, input);
+    const deck = await this.deckById(actor, deckId);
+    const normalizedName = normalizeTerm(name);
+    const taken = (await this.repo.listDecks(actor.workspaceId)).find((d) => d.normalizedName === normalizedName && d.id !== deck.id);
+    if (taken) throw new DomainError("rule", `You already have a deck called "${taken.name}".`);
+    if (!(await this.repo.renameDeck(actor.workspaceId, deck.id, name, normalizedName))) {
+      throw new DomainError("not_found", "Deck not found");
+    }
+    return this.deckViewOf(actor, { ...deck, name, normalizedName });
+  }
+
+  async renameDeckByName(actor: Actor, input: unknown): Promise<{ from: string; deck: DeckView }> {
+    const { deck, newName } = parse(RenameDeckByNameInput, input);
+    const current = await this.deckByName(actor, deck);
+    return { from: current.name, deck: await this.renameDeck(actor, current.id, { name: newName }) };
+  }
+
+  /** Permanently deletes a deck and every topic in it, with their history and links. */
+  async deleteDeck(actor: Actor, deckId: string): Promise<{ name: string; topicCount: number }> {
+    const deck = await this.deckViewOf(actor, await this.deckById(actor, deckId));
+    if (!(await this.repo.deleteDeck(actor.workspaceId, deck.id))) throw new DomainError("not_found", "Deck not found");
+    return { name: deck.name, topicCount: deck.topicCount };
+  }
+
+  /** The same delete by name, as an assistant makes it. It needs the user's confirmation, passed as `confirmed: true`. */
+  async deleteDeckByName(actor: Actor, input: unknown): Promise<{ name: string; topicCount: number }> {
+    const { deck } = parse(DeleteDeckInput, input);
+    return this.deleteDeck(actor, (await this.deckByName(actor, deck)).id);
+  }
+
+  /** The workspace's decks, oldest first. Creates the default deck for someone who has none, so there is always one to add to. */
+  private async decksOf(actor: Actor): Promise<DeckRecord[]> {
+    const decks = await this.repo.listDecks(actor.workspaceId);
+    if (decks.length > 0) return decks.sort(byCreated);
+    const { record } = await this.repo.insertDeckIfAbsent({
+      workspaceId: actor.workspaceId,
+      name: DEFAULT_DECK_NAME,
+      normalizedName: normalizeTerm(DEFAULT_DECK_NAME),
+      createdBy: actor.userId,
+      createdAt: this.clock(),
+    });
+    return [record];
+  }
+
+  private async deckById(actor: Actor, deckId: string): Promise<DeckRecord> {
+    const deck = (await this.repo.listDecks(actor.workspaceId)).find((d) => d.id === deckId);
+    if (!deck) throw new DomainError("not_found", "Deck not found");
+    return deck;
+  }
+
+  private async deckByName(actor: Actor, name: string): Promise<DeckRecord> {
+    const decks = await this.decksOf(actor);
+    const deck = decks.find((d) => d.normalizedName === normalizeTerm(name));
+    if (!deck) throw new DomainError("not_found", `No deck called "${name}". The user's decks: ${deckList(decks)}.`);
+    return deck;
+  }
+
+  /** Which deck a list or search is limited to, if any. */
+  private async deckFilter(actor: Actor, name?: string, id?: string): Promise<DeckRecord | undefined> {
+    if (id !== undefined) return this.deckById(actor, id);
+    if (name !== undefined) return this.deckByName(actor, name);
+    return undefined;
+  }
+
+  /** Where a new topic goes: the deck named, or the only deck. With several decks and none named, the assistant must ask. */
+  private async targetDeck(actor: Actor, name?: string, id?: string): Promise<DeckRecord> {
+    const chosen = await this.deckFilter(actor, name, id);
+    if (chosen) return chosen;
+    const decks = await this.decksOf(actor);
+    if (decks.length === 1) return decks[0]!;
+    throw new DomainError(
+      "rule",
+      `The user has ${decks.length} decks: ${deckList(decks)}. Ask which deck to add it to, then pass it as deck.`,
+    );
+  }
+
+  private async deckViewOf(actor: Actor, deck: DeckRecord): Promise<DeckView> {
+    const topics = await this.repo.listTopicRecords(actor.workspaceId);
+    return deckView(deck, topics.filter((t) => t.deckId === deck.id).length);
   }
 
   /** Personal settings. Until the user saves a style of their own, they get the default preset. */
@@ -330,19 +528,21 @@ export class PrepUpService {
   }
 
   private async view(actor: Actor, topicId: string): Promise<TopicView> {
-    const [state, links] = await Promise.all([
+    const [state, links, decks] = await Promise.all([
       this.state(actor, topicId),
       this.repo.listLinksForTopic(actor.workspaceId, topicId),
+      this.repo.listDecks(actor.workspaceId),
     ]);
-    return toView(state, this.clock(), links);
+    return toView(state, this.clock(), links, deckRefOf(decks, state.topic.deckId));
   }
 
   /** Every topic in priority order, with its links filled in from one links query. */
   private async allViews(actor: Actor): Promise<{ views: TopicView[]; links: LinkPair[] }> {
     const now = this.clock();
-    const [states, links] = await Promise.all([
+    const [states, links, decks] = await Promise.all([
       this.repo.listTopicStates(actor.workspaceId, actor.userId),
       this.repo.listLinks(actor.workspaceId),
+      this.repo.listDecks(actor.workspaceId),
     ]);
     const term = new Map(states.map((s) => [s.topic.id, s.topic.term]));
     const neighbours = new Map<string, TopicLinks>(states.map((s) => [s.topic.id, { buildsOn: [], neededFor: [] }]));
@@ -353,7 +553,7 @@ export class PrepUpService {
       neighbours.get(l.buildsOnId)!.neededFor.push({ id: l.topicId, term: topic });
     }
     const views = states
-      .map((s) => toView(s, now, neighbours.get(s.topic.id)))
+      .map((s) => toView(s, now, neighbours.get(s.topic.id), deckRefOf(decks, s.topic.deckId)))
       .sort(
         (a, b) =>
           b.priority - a.priority ||
@@ -364,7 +564,21 @@ export class PrepUpService {
   }
 }
 
-export function toView(s: TopicState, now: Date, links: TopicLinks = NO_LINKS): TopicView {
+function deckView(d: DeckRecord, topicCount: number): DeckView {
+  return { id: d.id, name: d.name, topicCount, createdAt: d.createdAt.toISOString() };
+}
+
+function deckRefOf(decks: DeckRecord[], deckId: string): DeckRef {
+  const deck = decks.find((d) => d.id === deckId);
+  return { id: deckId, name: deck?.name ?? DEFAULT_DECK_NAME };
+}
+
+export function toView(
+  s: TopicState,
+  now: Date,
+  links: TopicLinks = NO_LINKS,
+  deck: DeckRef = { id: s.topic.deckId, name: DEFAULT_DECK_NAME },
+): TopicView {
   const state = computeScore({
     lastScore: s.lastScore,
     lastTestAt: s.lastTestAt,
@@ -374,6 +588,7 @@ export function toView(s: TopicState, now: Date, links: TopicLinks = NO_LINKS): 
   return {
     id: s.topic.id,
     term: s.topic.term,
+    deck,
     sourceUrl: s.topic.sourceUrl,
     importance: s.importance,
     explanation: s.explanation,

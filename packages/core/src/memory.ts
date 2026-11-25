@@ -7,6 +7,7 @@ import type { Importance, Score } from "@prepup/contracts";
 import type { LinkPair } from "./links.js";
 import type {
   ChangeSet,
+  DeckRecord,
   EventRecord,
   PrepUpRepository,
   SettingsPatch,
@@ -17,6 +18,7 @@ import type {
 
 export class InMemoryRepository implements PrepUpRepository {
   private workspaces = new Map<string, string>(); // owner userId -> workspaceId
+  private decks: DeckRecord[] = [];
   private topics: TopicRecord[] = [];
   private settings = new Map<string, { importance: Importance; explanation: string }>();
   private events: EventRecord[] = [];
@@ -32,16 +34,60 @@ export class InMemoryRepository implements PrepUpRepository {
     return id;
   }
 
+  async listDecks(workspaceId: string) {
+    return this.decks.filter((d) => d.workspaceId === workspaceId);
+  }
+
+  async insertDeckIfAbsent(deck: Omit<DeckRecord, "id">) {
+    const existing = this.decks.find((d) => d.workspaceId === deck.workspaceId && d.normalizedName === deck.normalizedName);
+    if (existing) return { record: existing, created: false };
+    const record = { ...deck, id: randomUUID() };
+    this.decks.push(record);
+    return { record, created: true };
+  }
+
+  async renameDeck(workspaceId: string, deckId: string, name: string, normalizedName: string) {
+    const deck = this.decks.find((d) => d.id === deckId && d.workspaceId === workspaceId);
+    if (!deck) return false;
+    if (this.decks.some((d) => d.workspaceId === workspaceId && d.id !== deckId && d.normalizedName === normalizedName)) {
+      throw new Error("deck name taken");
+    }
+    deck.name = name;
+    deck.normalizedName = normalizedName;
+    return true;
+  }
+
+  async deleteDeck(workspaceId: string, deckId: string) {
+    if (!this.decks.some((d) => d.id === deckId && d.workspaceId === workspaceId)) return false;
+    for (const t of this.topics.filter((x) => x.deckId === deckId)) await this.deleteTopic(workspaceId, t.id);
+    this.decks = this.decks.filter((d) => d.id !== deckId);
+    return true;
+  }
+
   async insertTopicIfAbsent(topic: Omit<TopicRecord, "id">) {
-    const existing = await this.findTopicByNormalizedTerm(topic.workspaceId, topic.normalizedTerm);
+    if (!this.decks.some((d) => d.id === topic.deckId && d.workspaceId === topic.workspaceId)) {
+      throw new Error("deck outside the workspace");
+    }
+    const existing = this.topics.find((t) => t.deckId === topic.deckId && t.normalizedTerm === topic.normalizedTerm);
     if (existing) return { record: existing, created: false };
     const record = { ...topic, id: randomUUID() };
     this.topics.push(record);
     return { record, created: true };
   }
 
-  async findTopicByNormalizedTerm(workspaceId: string, normalizedTerm: string) {
-    return this.topics.find((t) => t.workspaceId === workspaceId && t.normalizedTerm === normalizedTerm) ?? null;
+  async findTopicsByNormalizedTerm(workspaceId: string, normalizedTerm: string) {
+    return this.topics.filter((t) => t.workspaceId === workspaceId && t.normalizedTerm === normalizedTerm);
+  }
+
+  async moveTopic(workspaceId: string, topicId: string, deckId: string) {
+    const topic = this.topics.find((t) => t.id === topicId && t.workspaceId === workspaceId);
+    if (!topic || !this.decks.some((d) => d.id === deckId && d.workspaceId === workspaceId)) return false;
+    if (this.topics.some((t) => t.deckId === deckId && t.id !== topicId && t.normalizedTerm === topic.normalizedTerm)) {
+      throw new Error("term taken in that deck");
+    }
+    topic.deckId = deckId;
+    this.links = this.links.filter((l) => l.topicId !== topicId && l.buildsOnId !== topicId);
+    return true;
   }
 
   async countTopics(workspaceId: string) {
@@ -90,8 +136,10 @@ export class InMemoryRepository implements PrepUpRepository {
 
   async insertLinkIfAbsent(link: TopicLink, check: (existing: LinkPair[]) => void) {
     if (link.topicId === link.buildsOnId) throw new Error("self-link");
-    const inWorkspace = (id: string) => this.topics.some((t) => t.id === id && t.workspaceId === link.workspaceId);
-    if (!inWorkspace(link.topicId) || !inWorkspace(link.buildsOnId)) throw new Error("link outside the workspace");
+    const topic = (id: string) => this.topics.find((t) => t.id === id && t.workspaceId === link.workspaceId);
+    const [a, b] = [topic(link.topicId), topic(link.buildsOnId)];
+    if (!a || !b) throw new Error("link outside the workspace");
+    if (a.deckId !== b.deckId) throw new Error("link across decks");
     const existing = await this.listLinks(link.workspaceId);
     if (existing.some((l) => l.topicId === link.topicId && l.buildsOnId === link.buildsOnId)) return false;
     check(existing);
@@ -138,6 +186,7 @@ export class InMemoryRepository implements PrepUpRepository {
     const workspaceId = this.workspaces.get(userId);
     this.workspaces.delete(userId);
     const gone = new Set(this.topics.filter((t) => t.workspaceId === workspaceId).map((t) => t.id));
+    this.decks = this.decks.filter((d) => d.workspaceId !== workspaceId);
     this.topics = this.topics.filter((t) => !gone.has(t.id));
     this.events = this.events.filter((e) => e.userId !== userId && !gone.has(e.topicId));
     this.links = this.links.filter((l) => l.createdBy !== userId && !gone.has(l.topicId) && !gone.has(l.buildsOnId));

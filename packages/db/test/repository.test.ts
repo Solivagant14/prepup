@@ -125,6 +125,38 @@ describe("PostgresRepository", () => {
     ).rejects.toThrow();
   });
 
+  it("keeps a term once per deck, links inside one deck, and deletes a deck with its topics", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const dsa = (await service.createDeck(me, { name: "DSA" })).deck;
+    const sys = (await service.createDeck(me, { name: "System Design" })).deck;
+    const results = await Promise.all([
+      service.addTopic(me, { term: "Hashing", deckId: dsa.id }),
+      service.addTopic(me, { term: "hashing", deckId: dsa.id }),
+      service.addTopic(me, { term: "Hashing", deckId: sys.id }),
+    ]);
+    expect(new Set(results.map((r) => r.topic.id)).size).toBe(2);
+    const arrays = (await service.addTopic(me, { term: "Arrays", deckId: dsa.id })).topic;
+    const hashing = results[0]!.topic;
+    const caching = (await service.addTopic(me, { term: "Caching", deckId: sys.id })).topic;
+
+    // The adapter refuses a link across decks, whatever the caller checked.
+    await expect(
+      new PostgresRepository(db).insertLinkIfAbsent(
+        { workspaceId: me.workspaceId, topicId: caching.id, buildsOnId: arrays.id, createdBy: me.userId, createdAt: now },
+        () => {},
+      ),
+    ).rejects.toThrow(/same deck/);
+    await service.linkTopics(me, hashing.id, { buildsOnId: arrays.id });
+    await service.recordReview(me, { term: "Hashing", deck: "DSA", score: 3, feedback: "Good" });
+    const moved = await service.moveTopic(me, arrays.id, { deckId: sys.id });
+    expect(moved).toMatchObject({ removedLinks: 1, topic: { deck: { name: "System Design" } } });
+    expect(await db.select().from(schema.topicLinks)).toEqual([]);
+
+    expect(await service.deleteDeck(me, dsa.id)).toEqual({ name: "DSA", topicCount: 1 });
+    expect((await service.listTopics(me)).map((t) => t.term).sort()).toEqual(["Arrays", "Caching", "Hashing"]);
+    expect((await db.select().from(schema.reviewEvents)).length).toBe(0);
+  });
+
   it("cascades a delete to settings and review events", async () => {
     const me = await service.resolveActor(randomUUID());
     const { topic } = await service.addTopic(me, { term: "Evals" });
