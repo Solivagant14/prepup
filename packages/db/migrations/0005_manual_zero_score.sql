@@ -1,0 +1,3 @@
+ALTER TABLE "review_events" DROP CONSTRAINT "review_events_score_range";--> statement-breakpoint
+ALTER TABLE "review_events" ADD CONSTRAINT "review_events_zero_is_manual" CHECK ("review_events"."score" IS DISTINCT FROM 0 OR "review_events"."kind" = 'manual_edit');--> statement-breakpoint
+ALTER TABLE "review_events" ADD CONSTRAINT "review_events_score_range" CHECK ("review_events"."score" IS NULL OR "review_events"."score" BETWEEN 0 AND 5);
