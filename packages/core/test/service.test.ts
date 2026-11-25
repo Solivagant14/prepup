@@ -458,3 +458,34 @@ describe("decks", () => {
     expect((await service.listDecks(bob)).map((d) => d.name)).toEqual(["My deck"]);
   });
 });
+
+describe("automatic linking", () => {
+  it("is off until the user turns it on, and doesn't touch their testing style", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    expect(await service.getSettings(me)).toMatchObject({ autoLink: false, preset: "interviewer" });
+    expect(await service.updateSettings(me, { autoLink: true })).toMatchObject({ autoLink: true, preset: "interviewer" });
+    expect(await service.autoLink(me)).toBe(true);
+    expect(await service.autoLink(await service.resolveActor("user-2"))).toBe(false);
+    await expect(service.updateSettings(me, {})).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("tracks which topics an assistant still has to check, and asks again after a move", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    const arrays = (await service.addTopic(me, { term: "Arrays" })).topic;
+    expect(arrays.needsLinks).toBe(true);
+    await service.addTopic(me, { term: "Sorting" });
+    await service.addTopic(me, { term: "Graphs" });
+
+    // Linking by term checks the topic that builds on the other, not the prerequisite.
+    await service.linkTopicsByTerm(me, { term: "Sorting", buildsOnTerm: "Arrays" });
+    expect((await service.listTopics(me, { filter: "needs_links" })).map((t) => t.term).sort()).toEqual(["Arrays", "Graphs"]);
+    expect(await service.markTopicsLinked(me, { terms: ["arrays", "Graphs"] })).toEqual({ terms: ["Arrays", "Graphs"] });
+    expect(await service.listTopics(me, { filter: "needs_links" })).toEqual([]);
+    await expect(service.markTopicsLinked(me, { terms: ["Nope"] })).rejects.toMatchObject({ code: "not_found" });
+
+    const other = (await service.createDeck(me, { name: "DSA" })).deck;
+    expect((await service.moveTopic(me, arrays.id, { deckId: other.id })).topic.needsLinks).toBe(true);
+  });
+});

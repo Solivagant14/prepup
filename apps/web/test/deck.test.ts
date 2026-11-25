@@ -38,6 +38,7 @@ const topic = (over: Partial<TopicView>): TopicView => ({
   priority: 0,
   buildsOn: [],
   neededFor: [],
+  needsLinks: false,
   ...over,
 });
 

@@ -13,6 +13,7 @@ import {
   LinkTopicInput,
   LinkTopicsInput,
   ListTopicsInput,
+  MarkTopicsLinkedInput,
   MAX_DECKS,
   MAX_PREREQUISITES,
   MoveTopicByNameInput,
@@ -70,6 +71,7 @@ const FILTERS: Record<TopicFilter, (t: TopicView) => boolean> = {
   prep: (t) => t.score <= 2,
   fading_week: (t) => t.fadingThisWeek,
   confident: (t) => t.score >= 4,
+  needs_links: (t) => t.needsLinks,
 };
 
 /** The shortest overlap that makes two terms "similar": below this, nearly everything matches. */
@@ -118,6 +120,7 @@ export class PrepUpService {
       sourceUrl: sourceUrl ?? null,
       createdBy: actor.userId,
       createdAt: now,
+      linksCheckedAt: null,
     });
     // Links stay inside one deck, so only this deck's topics are worth proposing.
     const others = (await this.repo.listTopicRecords(actor.workspaceId)).filter(
@@ -284,7 +287,25 @@ export class PrepUpService {
     const topic = await this.recordByTerm(actor, term, deck);
     const prerequisite = await this.prerequisiteByTerm(actor, buildsOnTerm, topic.deckId);
     const result = await this.linkTopics(actor, topic.id, { buildsOnId: prerequisite.id });
-    return { ...result, buildsOn: { id: prerequisite.id, term: prerequisite.term } };
+    // An assistant naming a prerequisite has checked this topic's links.
+    await this.repo.markLinksChecked(actor.workspaceId, [topic.id], this.clock());
+    return { ...result, topic: await this.view(actor, topic.id), buildsOn: { id: prerequisite.id, term: prerequisite.term } };
+  }
+
+  /**
+   * Records that an assistant checked what these topics build on, whether or
+   * not it found anything to link, so they drop out of the needs_links list.
+   */
+  async markTopicsLinked(actor: Actor, input: unknown): Promise<{ terms: string[] }> {
+    const { terms, deck } = parse(MarkTopicsLinkedInput, input);
+    const records: TopicRecord[] = [];
+    for (const term of terms) records.push(await this.recordByTerm(actor, term, deck));
+    await this.repo.markLinksChecked(
+      actor.workspaceId,
+      records.map((r) => r.id),
+      this.clock(),
+    );
+    return { terms: records.map((r) => r.term) };
   }
 
   async unlinkTopicsByTerm(actor: Actor, input: unknown) {
@@ -468,15 +489,24 @@ export class PrepUpService {
 
   /** Personal settings. Until the user saves a style of their own, they get the default preset. */
   async getSettings(actor: Actor): Promise<UserSettingsView> {
-    const saved = await this.repo.getTestingStyle(actor.userId);
+    const [saved, autoLink] = await Promise.all([
+      this.repo.getTestingStyle(actor.userId),
+      this.repo.getAutoLink(actor.userId),
+    ]);
     const testingStyle = saved?.text ?? DEFAULT_TESTING_STYLE;
-    return { testingStyle, preset: presetOf(testingStyle), updatedAt: saved?.updatedAt.toISOString() ?? null };
+    return { testingStyle, preset: presetOf(testingStyle), autoLink, updatedAt: saved?.updatedAt.toISOString() ?? null };
   }
 
   async updateSettings(actor: Actor, input: unknown): Promise<UserSettingsView> {
-    const { testingStyle } = parse(UpdateSettingsInput, input);
-    await this.repo.saveTestingStyle(actor.userId, testingStyle, this.clock());
+    const { testingStyle, autoLink } = parse(UpdateSettingsInput, input);
+    if (testingStyle !== undefined) await this.repo.saveTestingStyle(actor.userId, testingStyle, this.clock());
+    if (autoLink !== undefined) await this.repo.saveAutoLink(actor.userId, autoLink, this.clock());
     return this.getSettings(actor);
+  }
+
+  /** Whether the user lets their assistant link new topics without asking. Off unless they turned it on. */
+  async autoLink(actor: Actor): Promise<boolean> {
+    return this.repo.getAutoLink(actor.userId);
   }
 
   /** "Erase all my data": everything PrepUp holds for this user. Signing in again starts an empty deck. */
@@ -605,5 +635,6 @@ export function toView(
     priority: priority(s.importance, state),
     buildsOn: [...links.buildsOn].sort(byTerm),
     neededFor: [...links.neededFor].sort(byTerm),
+    needsLinks: s.topic.linksCheckedAt === null,
   };
 }

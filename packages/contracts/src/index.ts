@@ -42,7 +42,7 @@ export const MAX_PREREQUISITES = 20;
 /** How many look-alike topics a capture returns, for Claude to propose links from. */
 export const SIMILAR_TOPICS_LIMIT = 5;
 
-export const TOPIC_FILTERS = ["all", "prep", "fading_week", "confident"] as const;
+export const TOPIC_FILTERS = ["all", "prep", "fading_week", "confident", "needs_links"] as const;
 export const TopicFilter = z.enum(TOPIC_FILTERS);
 export type TopicFilter = z.infer<typeof TopicFilter>;
 
@@ -88,7 +88,7 @@ export type AddTopicInput = z.infer<typeof AddTopicInput>;
 
 export const ListTopicsInput = z.object({
   filter: TopicFilter.default("all").describe(
-    "all = every topic; prep = weakest and untested topics (score 0-2), most important first, with prerequisites ahead of what builds on them; fading_week = drops within 7 days; confident = score 4+",
+    "all = every topic; prep = weakest and untested topics (score 0-2), most important first, with prerequisites ahead of what builds on them; fading_week = drops within 7 days; confident = score 4+; needs_links = topics no assistant has checked for prerequisites yet",
   ),
   limit: z.number().int().min(1).max(500).default(20),
   deck: DeckName.optional().describe("Only topics in this deck, by name. Leave it out for every deck"),
@@ -230,16 +230,32 @@ export interface DeckRef {
   name: string;
 }
 
+/** Recording that an assistant checked what these topics build on, so they aren't checked again. */
+export const MarkTopicsLinkedInput = z.object({
+  terms: z
+    .array(Term)
+    .min(1, "Name at least one topic")
+    .max(100, "Mark at most 100 topics at a time")
+    .describe("The topics you checked for prerequisites, as they appear in PrepUp, whether or not you linked them"),
+  deck: InDeck.describe("The deck they are in. Leave it out when each term is in only one deck"),
+});
+export type MarkTopicsLinkedInput = z.infer<typeof MarkTopicsLinkedInput>;
+
 /** The longest testing style a user can save. Long enough for a persona, short enough to stay a style. */
 export const TESTING_STYLE_MAX = 1500;
 
-export const UpdateSettingsInput = z.object({
-  testingStyle: z
-    .string()
-    .trim()
-    .min(1, "Describe how you want to be tested")
-    .max(TESTING_STYLE_MAX, `Keep it under ${TESTING_STYLE_MAX} characters`),
-});
+export const UpdateSettingsInput = z
+  .object({
+    testingStyle: z
+      .string()
+      .trim()
+      .min(1, "Describe how you want to be tested")
+      .max(TESTING_STYLE_MAX, `Keep it under ${TESTING_STYLE_MAX} characters`)
+      .optional(),
+    /** Let the assistant link new topics to their prerequisites without asking first. */
+    autoLink: z.boolean().optional(),
+  })
+  .refine((v) => v.testingStyle !== undefined || v.autoLink !== undefined, { message: "Nothing to update" });
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
 
 /** How much of the shared host is in use. Totals only: nothing here identifies a person or a topic. */
@@ -266,6 +282,8 @@ export interface UserSettingsView {
   testingStyle: string;
   /** The preset the style matches exactly, or null when it's their own wording. */
   preset: string | null;
+  /** Whether their assistant links new topics to their prerequisites without asking first. */
+  autoLink: boolean;
   updatedAt: string | null;
 }
 
@@ -301,6 +319,8 @@ export interface TopicView {
   buildsOn: TopicRef[];
   /** The topics that build on this one. */
   neededFor: TopicRef[];
+  /** True until an assistant has checked what this topic builds on (and again after it moves deck). */
+  needsLinks: boolean;
 }
 
 export interface ReviewEventView {

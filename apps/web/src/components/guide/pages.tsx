@@ -508,6 +508,16 @@ function Links() {
           proposes each link in one line. It links them only after you say yes.
         </li>
         <li>
+          <strong>Automatically.</strong> Turn on <strong>Build my graph automatically</strong> in Settings and your
+          assistant links each new topic as you add it, to what it builds on among the topics already in that deck,
+          then tells you what it linked. Topics you add on this site get linked the next time you talk to it. It never
+          adds topics to make a link.
+        </li>
+        <li>
+          <strong>All at once.</strong> Say <Say>{PHRASES.buildGraph}</Say> and your assistant links your whole deck in
+          learning order. It asks first, unless automatic linking is on.
+        </li>
+        <li>
           <strong>On a card.</strong> Open the card and choose <strong>Add prerequisite</strong>. Remove a link with
           the × on its chip; an Undo appears straight after.
         </li>

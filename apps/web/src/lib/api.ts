@@ -119,6 +119,8 @@ export function createApi(getToken: TokenSource, mode: AppConfig["authMode"]) {
     unlinkTopic: (id: string, buildsOnId: string) =>
       call<TopicView>(`/api/topics/${id}/links/${buildsOnId}`, { method: "DELETE" }),
     testingSetup: () => call<TestingSetup>("/api/connector"),
+    saveSettings: (body: { testingStyle?: string; autoLink?: boolean }) =>
+      call<UserSettingsView>("/api/settings", { method: "PUT", body }),
     saveTestingStyle: (testingStyle: string) =>
       call<UserSettingsView>("/api/settings", { method: "PUT", body: { testingStyle } }),
     /** Removes everything PrepUp holds for the signed-in user. */

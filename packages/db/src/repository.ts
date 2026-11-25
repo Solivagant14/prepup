@@ -16,7 +16,7 @@ import type {
   TopicState,
 } from "@prepup/core";
 import type { EventSource } from "@prepup/contracts";
-import { and, count, desc, eq, isNotNull, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema.js";
 import {
@@ -157,7 +157,7 @@ export class PostgresRepository implements PrepUpRepository {
       if (!deck) return false;
       const moved = await tx
         .update(topics)
-        .set({ deckId })
+        .set({ deckId, linksCheckedAt: null })
         .where(and(eq(topics.workspaceId, workspaceId), eq(topics.id, topicId)))
         .returning({ id: topics.id });
       if (moved.length === 0) return false;
@@ -286,7 +286,31 @@ export class PostgresRepository implements PrepUpRepository {
       .from(userSettings)
       .where(eq(userSettings.userId, userId))
       .limit(1);
-    return row ?? null;
+    return row?.text ? { text: row.text, updatedAt: row.updatedAt } : null;
+  }
+
+  async getAutoLink(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ autoLink: userSettings.autoLink })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+      .limit(1);
+    return row?.autoLink ?? false;
+  }
+
+  async saveAutoLink(userId: string, autoLink: boolean, now: Date): Promise<void> {
+    await this.db
+      .insert(userSettings)
+      .values({ userId, autoLink, updatedAt: now })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { autoLink, updatedAt: now } });
+  }
+
+  async markLinksChecked(workspaceId: string, topicIds: string[], at: Date): Promise<void> {
+    if (topicIds.length === 0) return;
+    await this.db
+      .update(topics)
+      .set({ linksCheckedAt: at })
+      .where(and(eq(topics.workspaceId, workspaceId), inArray(topics.id, topicIds)));
   }
 
   async saveTestingStyle(userId: string, text: string, now: Date): Promise<void> {

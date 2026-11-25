@@ -13,6 +13,7 @@ import {
   GetTopicInput,
   LinkTopicsInput,
   ListTopicsInput,
+  MarkTopicsLinkedInput,
   MoveTopicByNameInput,
   RecordReviewInput,
   RenameDeckByNameInput,
@@ -39,13 +40,13 @@ export const TOOLS = {
   whoami: {
     title: "Check the PrepUp connection",
     description:
-      "Confirms the connection works, counts the user's topics, lists their decks, and returns their current testing style. Call it before the first test in a conversation.",
+      "Confirms the connection works, counts the user's topics, lists their decks, says whether automatic linking is on and how many topics still need linking, and returns their current testing style. Call it before the first test in a conversation.",
     readOnly: true,
   },
   add_topic: {
     title: "Add a topic",
     description:
-      "Add a term or concept to one of the user's PrepUp decks. When they have more than one deck, pass deck (its name); if they haven't said which, ask. Idempotent: if the deck already has it (even spelled differently), the existing card is returned. Also returns similar topics already in that deck (a plain text match), so you can propose what the new topic builds on. It links nothing itself.",
+      "Add a term or concept to one of the user's PrepUp decks. When they have more than one deck, pass deck (its name); if they haven't said which, ask. Idempotent: if the deck already has it (even spelled differently), the existing card is returned. Also returns similar topics already in that deck (a plain text match), so you can propose what the new topic builds on, and says whether automatic linking is on; with it on, it lists every topic in that deck so you can link the new one right away. It links nothing itself.",
     readOnly: false,
   },
   list_topics: {
@@ -75,7 +76,7 @@ export const TOOLS = {
   link_topics: {
     title: "Link a topic to what it builds on",
     description:
-      'Record that one topic builds on another: term builds on buildsOnTerm ("RAG" builds on "Embeddings"). Only call after the user has said yes to that link. Both topics must already be in the same deck: links stay inside one deck. A link that would make a loop is refused. Links never change a score or the fade clock. Safe to call twice.',
+      'Record that one topic builds on another: term builds on buildsOnTerm ("RAG" builds on "Embeddings"). Only call after the user has said yes to that link, unless they turned on automatic linking (whoami and add_topic say so): then link direct prerequisites without asking and tell them afterwards. Both topics must already be in the same deck: links stay inside one deck. A link that would make a loop is refused. Links never change a score or the fade clock. Safe to call twice.',
     readOnly: false,
   },
   unlink_topics: {
@@ -88,6 +89,12 @@ export const TOOLS = {
     title: "Delete a topic",
     description:
       "Permanently delete one topic from the user's deck, with its score history, explanation and links. It cannot be undone. Only call after the user has asked to delete this topic and, in chat, you have named it, said it is permanent, and they have said yes; then pass confirmed: true. Never delete on your own initiative. One topic per call.",
+    readOnly: false,
+  },
+  mark_topics_linked: {
+    title: "Mark topics as checked for links",
+    description:
+      "Record that you have checked what these topics build on, whether or not you linked anything, so they leave the needs_links list. Call it after linking a new topic, or after deciding it builds on nothing in its deck. It changes no links and no scores.",
     readOnly: false,
   },
   list_decks: {
@@ -125,6 +132,10 @@ export const TOOLS = {
 export const PROMPTS = {
   test_me: { title: "Test me", description: "Run a short test on your PrepUp topics, in your testing style." },
   quick_capture: { title: "Quick capture", description: "Add one or more terms to PrepUp." },
+  build_graph: {
+    title: "Build my graph",
+    description: "Link your topics in learning order: each one to the topics it builds on, in one deck or all of them.",
+  },
 } as const;
 
 /** What the settings page lists under "What Claude can do". */
@@ -158,6 +169,7 @@ const brief = (t: TopicView) => ({
   lastTestedAt: t.lastTestedAt,
   hasExplanation: t.explanation.length > 0,
   buildsOn: t.buildsOn.map((p) => p.term),
+  needsLinks: t.needsLinks,
 });
 
 const WHO = { you: "the user", claude: "the assistant, from an earlier test" } as const;
@@ -193,7 +205,7 @@ export async function testingStyleFor(service: PrepUpService, actor: Actor): Pro
  */
 export function createMcpServer(service: PrepUpService, actor: Actor, style: string = DEFAULT_TESTING_STYLE): McpServer {
   const server = new McpServer(
-    { name: "prepup", title: "PrepUp", version: "0.6.0" },
+    { name: "prepup", title: "PrepUp", version: "0.7.0" },
     { instructions: buildInstructions(style), capabilities: { tools: {}, prompts: {} } },
   );
 
@@ -205,10 +217,17 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
         const decks = await service.listDecks(actor);
         const topics = decks.reduce((n, d) => n + d.topicCount, 0);
         const style = await testingStyleFor(service, actor);
-        return toolResult(`Connected to PrepUp. ${topics} topic(s) in ${decks.length} deck(s).\n\n${styleBlock(style)}`, {
+        const autoLink = await service.autoLink(actor);
+        const unlinked = autoLink ? (await service.listTopics(actor, { filter: "needs_links", limit: 500 })).length : 0;
+        const linking = autoLink
+          ? `Automatic linking is on: the user wants new topics linked without being asked.${unlinked ? ` ${unlinked} topic(s) still need linking: call list_topics with filter needs_links, link them, then mark_topics_linked.` : ""}`
+          : "Automatic linking is off: propose each link and wait for the user's yes.";
+        return toolResult(`Connected to PrepUp. ${topics} topic(s) in ${decks.length} deck(s). ${linking}\n\n${styleBlock(style)}`, {
           userId: actor.userId,
           topics,
           decks: decks.map((d) => ({ name: d.name, topics: d.topicCount })),
+          autoLink,
+          topicsNeedingLinks: unlinked,
         });
       }),
   );
@@ -223,15 +242,23 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
     async (input) =>
       guard(async () => {
         const { topic, created, similar } = await service.addTopic(actor, input);
+        const autoLink = await service.autoLink(actor);
+        const added = created
+          ? `Added "${topic.term}" to the deck "${topic.deck.name}".`
+          : `"${topic.term}" was already in the deck "${topic.deck.name}"; nothing changed.`;
+        if (autoLink && topic.needsLinks) {
+          const deckTopics = (await service.listTopics(actor, { deckId: topic.deck.id, limit: 500 }))
+            .filter((t) => t.id !== topic.id)
+            .map((t) => t.term);
+          const next = deckTopics.length
+            ? ` Automatic linking is on: link "${topic.term}" now, without asking, to the topics below it directly builds on, and link the ones that directly build on it. Use only these topics; add none. Then call mark_topics_linked and tell the user in one line what you linked.`
+            : ` Automatic linking is on, but it is the only topic in its deck, so there is nothing to link yet. Call mark_topics_linked for it.`;
+          return toolResult(added + next, { ...brief(topic), deckTopics });
+        }
         const hint = similar.length
           ? " Similar topics are listed below: if it builds on any of them (or on anything else in the deck), ask the user before linking."
           : "";
-        return toolResult(
-          (created
-            ? `Added "${topic.term}" to the deck "${topic.deck.name}".`
-            : `"${topic.term}" was already in the deck "${topic.deck.name}"; nothing changed.`) + hint,
-          { ...brief(topic), similarTopics: similar.map((s) => s.term) },
-        );
+        return toolResult(added + hint, { ...brief(topic), similarTopics: similar.map((s) => s.term) });
       }),
   );
 
@@ -337,6 +364,20 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
       guard(async () => {
         const { term } = await service.deleteTopicByTerm(actor, input);
         return toolResult(`Deleted "${term}" from PrepUp. This can't be undone.`, { term, deleted: true });
+      }),
+  );
+
+  server.registerTool(
+    "mark_topics_linked",
+    {
+      ...meta("mark_topics_linked"),
+      inputSchema: MarkTopicsLinkedInput,
+      annotations: { idempotentHint: true, destructiveHint: false },
+    },
+    async (input) =>
+      guard(async () => {
+        const { terms } = await service.markTopicsLinked(actor, input);
+        return toolResult(`Marked ${terms.length} topic(s) as checked for links.`, { terms });
       }),
   );
 
@@ -458,6 +499,32 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
   );
 
   server.registerPrompt(
+    "build_graph",
+    {
+      ...PROMPTS.build_graph,
+      argsSchema: { deck: z.string().optional().describe("Only this deck, by name, e.g. DSA. Leave empty for every deck") },
+    },
+    async ({ deck }) => {
+      const where = deck?.trim() ? `my deck "${deck.trim()}"` : "each of my PrepUp decks";
+      const autoLink = await service.autoLink(actor);
+      const consent = autoLink
+        ? "Automatic linking is on, so link them without asking, then tell me in a short list what you linked."
+        : "First show me every link you plan as one short list (\"RAG builds on Embeddings\"), and link them only after I say yes.";
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `Build the learning graph for ${where} in PrepUp. Call list_topics (limit 500${deck?.trim() ? `, deck "${deck.trim()}"` : ""}) and work out the order to learn them in. Link each topic only to its direct prerequisites among those topics, in the same deck: if C builds on B and B builds on A, link C to B and B to A, not C to A. Keep links that are already there, add no topics, and make no loops. ${consent} Then call mark_topics_linked for every topic you checked.`,
+            },
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerPrompt(
     "quick_capture",
     {
       ...PROMPTS.quick_capture,
@@ -469,7 +536,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
           role: "user",
           content: {
             type: "text",
-            text: `Add these to PrepUp, one add_topic call each: ${terms}. If I have more than one deck and haven't said which, ask me first. Then tell me in one line which were new, and ask me before linking any of them to what they build on.`,
+            text: `Add these to PrepUp, one add_topic call each: ${terms}. If I have more than one deck and haven't said which, ask me first. Then tell me in one line which were new, and link them to what they build on: ask me first, unless automatic linking is on.`,
           },
         },
       ],

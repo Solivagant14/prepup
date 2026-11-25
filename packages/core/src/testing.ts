@@ -78,10 +78,10 @@ export const FIXED_RULES: FixedRule[] = [
   },
   {
     id: "link",
-    title: "Links are proposed, never made for you",
-    promise: "Topics are linked only after you say yes.",
-    rule: 'When the user adds a topic, look at the similar topics add_topic returns, and at their deck, for what the new topic builds on. Propose each link in one line ("RAG builds on Embeddings. Link them?") and call link_topics only after they say yes.',
-    why: "Your assistant proposes each link, and a link never changes a score.",
+    title: "Links are proposed, unless you let your assistant link for you",
+    promise: "Topics are linked only after you say yes, unless you turn on automatic linking.",
+    rule: 'When the user adds a topic, look at the similar topics add_topic returns, and at the other topics in that deck, for what the new topic builds on. Propose each link in one line ("RAG builds on Embeddings. Link them?") and call link_topics only after they say yes. If automatic linking is on (whoami and add_topic say so), link it straight away, without asking, to its direct prerequisites among their existing topics in that deck, and link the topics there that directly build on it, then tell them in one line what you linked. Never add a topic just to link it. After checking a topic, call mark_topics_linked, even if you linked nothing.',
+    why: "Your assistant proposes each link, or links for you if you asked it to; a link never changes a score.",
   },
 ];
 
@@ -135,6 +135,7 @@ export function buildInstructions(style: string): string {
     "Capturing: when the user mentions a term they want to learn, call add_topic. It is safe to call twice; duplicates merge.",
     'Topics can build on other topics ("RAG builds on Embeddings"). Links map the deck; they never change a score or the fade clock.',
     "",
+    "Automatic linking: if whoami says it is on, call list_topics with the needs_links filter at the start of a conversation and link those topics, without asking, to their direct prerequisites among the topics already in their deck (and the topics there that directly build on them), then mark them with mark_topics_linked and tell the user in one line what you linked.",
     'Decks: topics are grouped in decks the user names, like "DSA" or "System Design". list_decks shows them. When the user has more than one deck, add_topic needs the deck: ask which one if they haven\'t said. The same term can be in two decks as separate topics; if a tool says a term is in several decks, ask which deck and pass it. Links stay inside one deck. Create, rename or delete a deck, or move a topic, only after the user says yes in chat.',
     "",
     "Testing has two layers: fixed rules that always apply, and the user's own testing style.",

@@ -149,6 +149,8 @@ export function Deck({ api }: { api: Api }) {
     confident: summary.confident,
   };
   const linkCount = linkPairs(all).length;
+  const unchecked = all.filter((t) => t.needsLinks).length;
+  const graphPrompt = deckName ? `Build my PrepUp graph for the ${deckName} deck` : "Build my PrepUp graph";
   const open: TopicView | undefined = everything.find((t) => t.id === openId);
   const steps = topics.isSuccess && !hideStart ? startSteps(everything) : null;
   const empty = topics.isSuccess && all.length === 0;
@@ -268,6 +270,13 @@ export function Deck({ api }: { api: Api }) {
             ? "No links yet. Open a card and add what it builds on, or ask your assistant to link your topics."
             : "Arrows run from a topic to what builds on it, so each path reads left to right."}{" "}
           Drag to move, pinch or Ctrl + scroll to zoom, tap a topic to open it.
+          {unchecked > 0 && all.length > 1 && (
+            <>
+              {" "}
+              {unchecked === 1 ? "1 topic hasn't" : `${unchecked} topics haven't`} been checked for links yet: ask your assistant
+              “{graphPrompt}”.
+            </>
+          )}
         </p>
       )}
 
