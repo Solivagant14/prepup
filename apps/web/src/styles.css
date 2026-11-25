@@ -565,7 +565,7 @@ details.more > :not(summary) { margin: 0 24px 22px; }
 .deck-bar { display: flex; flex-direction: column; gap: 10px; }
 .deck-tabs { gap: 6px; }
 .deck-tabs .tab { border: 1px solid var(--line); background: var(--surface); }
-.deck-tabs .tab[aria-selected="true"] { border-color: var(--btn); }
+.deck-tabs .tab[aria-selected="true"] { border-color: var(--btn); background: var(--btn); color: var(--btn-ink); }
 .deck-tabs .deck-new { border-style: dashed; color: var(--muted); }
 .deck-tabs .deck-new:hover { color: var(--ink); }
 .deck-actions { display: flex; gap: 12px; margin-top: -6px; }
