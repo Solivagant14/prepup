@@ -301,6 +301,7 @@ describe("testing style", () => {
     expect(await service.getSettings(alice)).toEqual({
       testingStyle: DEFAULT_TESTING_STYLE,
       preset: "interviewer",
+      autoLink: false,
       updatedAt: null,
     });
 
@@ -309,6 +310,7 @@ describe("testing style", () => {
     expect(saved).toEqual({
       testingStyle: "Test me like a customer who is not technical.",
       preset: null,
+      autoLink: false,
       updatedAt: "2026-11-02T09:00:00.000Z",
     });
     expect((await service.getSettings(bob)).preset).toBe("interviewer");

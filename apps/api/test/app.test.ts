@@ -919,8 +919,8 @@ describe("automatic linking", () => {
 
   it("is off by default: add_topic asks the assistant to propose links", async () => {
     expect(await (await app.request("/api/settings", as(USER))).json()).toMatchObject({ autoLink: false });
-    await call(USER, "add_topic", { term: "Embeddings" });
-    const added = await call(USER, "add_topic", { term: "RAG" });
+    await call(USER, "add_topic", { term: "Vector databases" });
+    const added = await call(USER, "add_topic", { term: "Vector search" });
     expect(added.text).toContain("ask the user before linking");
     expect(added.text).not.toContain("Automatic linking is on");
     expect((await call(USER, "whoami", {})).text).toContain("Automatic linking is off");
