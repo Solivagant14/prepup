@@ -164,6 +164,9 @@ export function Deck({ api }: { api: Api }) {
   const unchecked = all.filter((t) => t.needsLinks).length;
   const order = linkCount > 0 ? studyOrder(all) : [];
   const copyLinkPrompt = async () => {
+    if (all.length < 2) {
+      return say({ text: `Add at least two topics to ${deckName ? `"${deckName}"` : "a deck"} to link them.` });
+    }
     try {
       await navigator.clipboard.writeText(linkPrompt(deckName));
       say({ text: "Copied. Paste it into a chat with your assistant." });
@@ -295,11 +298,10 @@ export function Deck({ api }: { api: Api }) {
               <> {unchecked === 1 ? "1 topic hasn't" : `${unchecked} topics haven't`} been checked for links yet.</>
             )}
           </p>
-          {all.length > 1 && (
-            <button type="button" className="btn primary" onClick={() => void copyLinkPrompt()}>
-              Link topics
-            </button>
-          )}
+          {/* In every deck, and in All decks: with fewer than two topics it says what's missing instead of copying. */}
+          <button type="button" className="btn primary" onClick={() => void copyLinkPrompt()}>
+            Link topics
+          </button>
         </div>
       )}
 
