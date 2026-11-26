@@ -117,6 +117,7 @@ describe("PostgresRepository", () => {
     const moved = await service.getTopic(me, topic.id);
     expect(moved).toMatchObject({ understanding: "intermediate", score: 0 });
     expect(moved.levels.map((l) => l.score)).toEqual([5, 0, 0]);
+    advance(1);
     await service.recordReview(me, { term: "RAG", score: 2, feedback: "Partial" });
     await service.updateTopic(me, topic.id, { understanding: "beginner" }, "web");
     expect(await service.getTopic(me, topic.id)).toMatchObject({ understanding: "beginner", score: 5 });
