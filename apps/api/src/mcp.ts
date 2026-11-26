@@ -516,7 +516,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
             role: "user",
             content: {
               type: "text",
-              text: `Build the learning graph for ${where} in PrepUp. Call list_topics (limit 500${deck?.trim() ? `, deck "${deck.trim()}"` : ""}) and work out the order to learn them in. Link each topic only to its direct prerequisites among those topics, in the same deck: if C builds on B and B builds on A, link C to B and B to A, not C to A. Keep links that are already there, add no topics, and make no loops. ${consent} Then call mark_topics_linked for every topic you checked.`,
+              text: `Build the learning graph for ${where} in PrepUp. Call list_topics (limit 500${deck?.trim() ? `, deck "${deck.trim()}"` : ""}) and work out the order to learn them in. Link each topic only to its direct prerequisites among those topics, in the same deck: if C builds on B and B builds on A, link C to B and B to A, not C to A. Keep links that are already there, add no topics, and make no loops. ${consent} Then call mark_topics_linked for every topic you checked, and end with a short study plan: which topic to start with and the order after it.`,
             },
           },
         ],

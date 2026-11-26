@@ -962,6 +962,6 @@ describe("automatic linking", () => {
     expect(ask.result.messages[0].content.text).toMatch(/my deck "DSA".*link them only after I say yes/s);
     await setAutoLink(USER, true);
     const auto = await mcp(USER, "prompts/get", { name: "build_graph", arguments: {} });
-    expect(auto.result.messages[0].content.text).toMatch(/each of my PrepUp decks.*without asking.*mark_topics_linked/s);
+    expect(auto.result.messages[0].content.text).toMatch(/each of my PrepUp decks.*without asking.*mark_topics_linked.*study plan/s);
   });
 });

@@ -514,8 +514,9 @@ function Links() {
           adds topics to make a link.
         </li>
         <li>
-          <strong>All at once.</strong> Say <Say>{PHRASES.buildGraph}</Say> and your assistant links your whole deck in
-          learning order. It asks first, unless automatic linking is on.
+          <strong>All at once.</strong> Say <Say>{PHRASES.buildGraph}</Say>, or press <strong>Link topics</strong> in the
+          Graph view and paste what it copies into a chat. Your assistant links the whole deck in learning order and
+          ends with a study plan. It asks first, unless automatic linking is on.
         </li>
         <li>
           <strong>On a card.</strong> Open the card and choose <strong>Add prerequisite</strong>. Remove a link with
@@ -532,6 +533,10 @@ function Links() {
         On the Deck screen, <strong>Graph</strong> draws the same topics as a board you can drag and zoom. Arrows run
         from a topic to what builds on it, so each path reads left to right. Topics with no links sit in a group
         underneath. Tap any topic to open its card.
+      </p>
+      <p>
+        Under the board, <strong>Where to start</strong> lists the deck in the order to learn it: each topic after what
+        it builds on, weaker and more important topics first.
       </p>
     </>
   );

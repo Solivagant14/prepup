@@ -8,6 +8,7 @@ import {
   explanationNote,
   freshnessText,
   inDeck,
+  linkPrompt,
   matches,
   mix,
   prefersLightText,
@@ -15,6 +16,7 @@ import {
   RAMP,
   shownIn,
   startSteps,
+  studyOrder,
   summarize,
   TABS,
 } from "../src/lib/deck.js";
@@ -209,5 +211,28 @@ describe("decks", () => {
     expect(inDeck("dsa", deck).map((t) => t.id)).toEqual(["a", "c"]);
     expect(inDeck(ALL_DECKS, deck)).toHaveLength(3);
     expect(inDeck("gone", deck)).toEqual([]);
+  });
+});
+
+describe("linking the whole deck", () => {
+  it("copies a request that names the deck, adds nothing, and asks for a study plan", () => {
+    expect(linkPrompt("DSA")).toMatch(/^Build my PrepUp learning graph for the "DSA" deck\./);
+    expect(linkPrompt()).toContain("one deck at a time");
+    expect(linkPrompt("DSA")).toMatch(/Add no topics.*ask me before linking unless automatic linking is on.*study plan/s);
+  });
+
+  it("orders the deck so each topic comes after what it builds on, and otherwise keeps the deck's order", () => {
+    const ref = (t: TopicView) => ({ id: t.id, term: t.term });
+    const arrays = topic({ id: "a", term: "Arrays" });
+    const strings = topic({ id: "s", term: "Strings", buildsOn: [ref(arrays)] });
+    const dp = topic({ id: "d", term: "Dynamic programming", buildsOn: [ref(arrays), ref(strings)] });
+    const graphs = topic({ id: "g", term: "Graphs" });
+    // The deck arrives most urgent first: here DP and Graphs before their prerequisites.
+    expect(studyOrder([dp, graphs, strings, arrays]).map((t) => t.term)).toEqual([
+      "Arrays",
+      "Strings",
+      "Dynamic programming",
+      "Graphs",
+    ]);
   });
 });

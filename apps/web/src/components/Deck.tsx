@@ -3,7 +3,19 @@ import type { TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState, type FormEvent } from "react";
 import type { Api } from "../lib/api.js";
-import { ALL_DECKS, inDeck, linkPairs, shownIn, startSteps, summarize, TABS, type DeckChoice, type Tab } from "../lib/deck.js";
+import {
+  ALL_DECKS,
+  inDeck,
+  linkPairs,
+  linkPrompt,
+  shownIn,
+  startSteps,
+  studyOrder,
+  summarize,
+  TABS,
+  type DeckChoice,
+  type Tab,
+} from "../lib/deck.js";
 import { DeckBar } from "./DeckBar.js";
 import { GetStarted } from "./GetStarted.js";
 import { GraphBoard } from "./GraphBoard.js";
@@ -150,7 +162,15 @@ export function Deck({ api }: { api: Api }) {
   };
   const linkCount = linkPairs(all).length;
   const unchecked = all.filter((t) => t.needsLinks).length;
-  const graphPrompt = deckName ? `Build my PrepUp graph for the ${deckName} deck` : "Build my PrepUp graph";
+  const order = linkCount > 0 ? studyOrder(all) : [];
+  const copyLinkPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(linkPrompt(deckName));
+      say({ text: "Copied. Paste it into a chat with your assistant." });
+    } catch {
+      say({ text: `Couldn't copy. Ask your assistant: ${linkPrompt(deckName)}`, error: true });
+    }
+  };
   const open: TopicView | undefined = everything.find((t) => t.id === openId);
   const steps = topics.isSuccess && !hideStart ? startSteps(everything) : null;
   const empty = topics.isSuccess && all.length === 0;
@@ -265,19 +285,22 @@ export function Deck({ api }: { api: Api }) {
         </>
       )}
       {view === "graph" && (
-        <p className="tab-hint view-hint">
-          {linkCount === 0
-            ? "No links yet. Open a card and add what it builds on, or ask your assistant to link your topics."
-            : "Arrows run from a topic to what builds on it, so each path reads left to right."}{" "}
-          Drag to move, pinch or Ctrl + scroll to zoom, tap a topic to open it.
-          {unchecked > 0 && all.length > 1 && (
-            <>
-              {" "}
-              {unchecked === 1 ? "1 topic hasn't" : `${unchecked} topics haven't`} been checked for links yet: ask your assistant
-              “{graphPrompt}”.
-            </>
+        <div className="graph-head">
+          <p className="tab-hint view-hint">
+            {linkCount === 0
+              ? "No links yet. Press Link topics and paste the request into a chat with your assistant, or open a card and add what it builds on."
+              : "Arrows run from a topic to what builds on it, so each path reads left to right."}{" "}
+            Drag to move, pinch or Ctrl + scroll to zoom, tap a topic to open it.
+            {unchecked > 0 && all.length > 1 && (
+              <> {unchecked === 1 ? "1 topic hasn't" : `${unchecked} topics haven't`} been checked for links yet.</>
+            )}
+          </p>
+          {all.length > 1 && (
+            <button type="button" className="btn primary" onClick={() => void copyLinkPrompt()}>
+              Link topics
+            </button>
           )}
-        </p>
+        </div>
       )}
 
       <div id="deck-view" role="tabpanel" aria-labelledby={`view-${view}`}>
@@ -286,7 +309,28 @@ export function Deck({ api }: { api: Api }) {
         ) : topics.isError ? (
           <p className="error">{(topics.error as Error).message}</p>
         ) : view === "graph" ? (
-          <GraphBoard topics={all} onOpen={setOpenId} />
+          <>
+            <GraphBoard topics={all} onOpen={setOpenId} />
+            {order.length > 0 && (
+              <section className="study-order" aria-labelledby="study-title">
+                <h2 id="study-title">Where to start</h2>
+                <p className="note">The order to learn {deckName ? `“${deckName}”` : "these topics"} in: each topic comes after what it builds on.</p>
+                <ol>
+                  {order.map((t) => (
+                    <li key={t.id}>
+                      <button type="button" className="link-btn" onClick={() => setOpenId(t.id)}>
+                        {t.term}
+                      </button>
+                      <span className="small">
+                        {t.level}
+                        {showDeckOnCards ? ` · ${t.deck.name}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
+          </>
         ) : shown.length === 0 ? (
           <p className="empty">Nothing here right now.</p>
         ) : (
