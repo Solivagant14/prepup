@@ -184,7 +184,7 @@ export function Deck({ api }: { api: Api }) {
         <DeckBar
           api={api}
           decks={decks}
-          total={everything.length}
+          topics={everything}
           selected={deck}
           onSelect={(next) => {
             pickDeck(next);

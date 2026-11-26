@@ -1,32 +1,66 @@
 /**
- * The row of decks above the deck page: pick one deck or all of them, make a
- * new deck, rename or delete the one that's open. Deleting asks first, in
- * place, because it removes every topic in the deck.
+ * The row of decks above the deck page. Each deck is drawn as a small fanned
+ * stack of cards whose top card takes the colour of how well you know that
+ * deck, the same colours as the cards themselves. "All decks" fans out the
+ * colours of your first three decks. Pick a deck, make a new one, or rename
+ * and delete the open one from its menu. Deleting asks first, in place,
+ * because it removes every topic in the deck.
  */
-import type { DeckView } from "@prepup/contracts";
+import type { DeckView, TopicView } from "@prepup/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import type { Api } from "../lib/api.js";
-import { ALL_DECKS, type DeckChoice } from "../lib/deck.js";
+import { ALL_DECKS, deckLevel, deckShade, type DeckChoice } from "../lib/deck.js";
 
 type Mode = { kind: "idle" } | { kind: "new" } | { kind: "rename" } | { kind: "delete" };
 
 interface Props {
   api: Api;
   decks: DeckView[];
-  /** How many topics there are across every deck. */
-  total: number;
+  /** Every topic, in every deck: each deck's colour comes from its own topics. */
+  topics: TopicView[];
   selected: DeckChoice;
   onSelect: (choice: DeckChoice) => void;
   onMessage: (text: string, error?: boolean) => void;
 }
 
-export function DeckBar({ api, decks, total, selected, onSelect, onMessage }: Props) {
+const topicCount = (n: number) => (n === 0 ? "Empty" : n === 1 ? "1 topic" : `${n} topics`);
+
+/** Three card outlines, fanned; the top one (or all three, for All decks) filled with a colour. */
+function Stack({ shades, empty = false }: { shades: string[]; empty?: boolean }) {
+  const [back, middle, top] = shades.length >= 3 ? shades : ["transparent", "transparent", shades[0] ?? "transparent"];
+  return (
+    <span className={`deck-stack${empty ? " empty" : ""}`} aria-hidden="true">
+      <span style={{ "--shade": back } as CSSProperties} />
+      <span style={{ "--shade": middle } as CSSProperties} />
+      <span style={{ "--shade": top } as CSSProperties} />
+    </span>
+  );
+}
+
+export function DeckBar({ api, decks, topics, selected, onSelect, onMessage }: Props) {
   const qc = useQueryClient();
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const more = useRef<HTMLDivElement>(null);
   const current = decks.find((d) => d.id === selected);
+  const inDeck = (id: string) => topics.filter((t) => t.deck.id === id);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const away = (e: PointerEvent) => {
+      if (!more.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [menuOpen]);
 
   const done = () => {
     setMode({ kind: "idle" });
@@ -77,109 +111,163 @@ export function DeckBar({ api, decks, total, selected, onSelect, onMessage }: Pr
     if (mode.kind === "new") create.mutate(value);
     else if (mode.kind === "rename" && current) rename.mutate({ id: current.id, to: value });
   };
+  const pick = (choice: DeckChoice) => {
+    done();
+    setMenuOpen(false);
+    onSelect(choice);
+  };
 
   return (
     <section className="deck-bar" aria-label="Decks">
-      <div className="tabs deck-tabs" role="tablist" aria-label="Choose a deck">
-        <button
-          type="button"
-          role="tab"
-          className="tab"
-          aria-selected={selected === ALL_DECKS}
-          aria-label={`All decks, ${total}`}
-          onClick={() => {
-            done();
-            onSelect(ALL_DECKS);
-          }}
-        >
-          All decks <span className="mono">{total}</span>
-        </button>
-        {decks.map((d) => (
+      <div className="deck-row">
+        <div className="deck-strip" role="tablist" aria-label="Choose a deck">
           <button
-            key={d.id}
             type="button"
             role="tab"
-            className="tab"
-            aria-selected={selected === d.id}
-            aria-label={`${d.name}, ${d.topicCount}`}
+            className="deck-tab"
+            aria-selected={selected === ALL_DECKS}
+            aria-label={`All decks, ${topicCount(topics.length)}`}
+            onClick={() => pick(ALL_DECKS)}
+          >
+            <Stack shades={decks.length >= 3 ? decks.slice(0, 3).map((d) => deckShade(inDeck(d.id))) : [deckShade(topics)]} />
+            <span className="deck-text">
+              <span className="deck-name">All decks</span>
+              <span className="deck-meta">{topicCount(topics.length)}</span>
+            </span>
+          </button>
+          {decks.map((d) => {
+            const mine = inDeck(d.id);
+            return (
+              <button
+                key={d.id}
+                type="button"
+                role="tab"
+                className="deck-tab"
+                aria-selected={selected === d.id}
+                aria-label={`${d.name}, ${topicCount(d.topicCount)}, ${deckLevel(mine)}`}
+                onClick={() => pick(d.id)}
+              >
+                <Stack shades={[deckShade(mine)]} />
+                <span className="deck-text">
+                  <span className="deck-name">{d.name}</span>
+                  <span className="deck-meta">{topicCount(d.topicCount)}</span>
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            className="deck-tab deck-add"
+            aria-pressed={mode.kind === "new"}
             onClick={() => {
-              done();
-              onSelect(d.id);
+              setMenuOpen(false);
+              setName("");
+              setError(null);
+              setMode({ kind: "new" });
             }}
           >
-            {d.name} <span className="mono">{d.topicCount}</span>
+            <Stack shades={[]} empty />
+            <span className="deck-text">
+              <span className="deck-name">New deck</span>
+              <span className="deck-meta">Group topics</span>
+            </span>
           </button>
-        ))}
-        {mode.kind === "idle" && (
-          <button type="button" className="tab deck-new" onClick={() => setMode({ kind: "new" })}>
-            + New deck
-          </button>
+        </div>
+
+        {current && (
+          <div className="deck-more" ref={more}>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`Options for ${current.name}`}
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              <span aria-hidden="true">⋯</span>
+            </button>
+            {menuOpen && (
+              <div className="menu">
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setError(null);
+                    setName(current.name);
+                    setMode({ kind: "rename" });
+                  }}
+                >
+                  Rename deck
+                </button>
+                <button
+                  type="button"
+                  className="menu-item danger"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setError(null);
+                    setMode({ kind: "delete" });
+                  }}
+                >
+                  Delete deck
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      {mode.kind === "idle" && current && (
-        <div className="deck-actions">
-          <button
-            type="button"
-            className="link-btn"
-            onClick={() => {
-              setName(current.name);
-              setMode({ kind: "rename" });
-            }}
-          >
-            Rename
-          </button>
-          <button type="button" className="link-btn danger" onClick={() => setMode({ kind: "delete" })}>
-            Delete deck
-          </button>
-        </div>
-      )}
-
       {(mode.kind === "new" || mode.kind === "rename") && (
-        <form className="deck-form" onSubmit={submit}>
-          <label htmlFor="deck-name" className="sr-only">
-            {mode.kind === "new" ? "New deck name" : "Deck name"}
+        <form className="deck-panel deck-form" onSubmit={submit}>
+          <label htmlFor="deck-name" className="deck-panel-title">
+            {mode.kind === "new" ? "Name your new deck" : `Rename "${current?.name ?? ""}"`}
           </label>
-          <input
-            id="deck-name"
-            autoFocus
-            autoComplete="off"
-            maxLength={60}
-            placeholder={mode.kind === "new" ? "Name the deck, e.g. DSA" : "Deck name"}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Escape" && done()}
-          />
-          <button type="button" className="btn" onClick={done} disabled={busy}>
-            Cancel
-          </button>
-          <button type="submit" className="btn primary" disabled={busy}>
-            {mode.kind === "new" ? (create.isPending ? "Creating…" : "Create") : rename.isPending ? "Saving…" : "Save"}
-          </button>
+          <div className="deck-form-row">
+            <input
+              id="deck-name"
+              autoFocus
+              autoComplete="off"
+              maxLength={60}
+              placeholder="For example DSA, or System Design"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && done()}
+            />
+            <button type="button" className="btn" onClick={done} disabled={busy}>
+              Cancel
+            </button>
+            <button type="submit" className="btn primary" disabled={busy}>
+              {mode.kind === "new" ? (create.isPending ? "Creating…" : "Create deck") : rename.isPending ? "Saving…" : "Save name"}
+            </button>
+          </div>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
         </form>
       )}
 
       {mode.kind === "delete" && current && (
-        <div className="foot-ask deck-ask" role="group" aria-label="Confirm delete">
-          <span>
-            Delete "{current.name}" and its {current.topicCount} {current.topicCount === 1 ? "topic" : "topics"}, with their
-            history? This can't be undone.
-          </span>
+        <div className="deck-panel deck-danger" role="group" aria-label="Confirm delete">
+          <p className="deck-panel-title">
+            Delete "{current.name}" and its {current.topicCount} {current.topicCount === 1 ? "topic" : "topics"}?
+          </p>
+          <p className="deck-panel-note">Their scores, explanations and links go too. This can't be undone.</p>
           <div className="row-end">
             <button type="button" className="btn" autoFocus onClick={done} disabled={busy}>
-              Cancel
+              Keep the deck
             </button>
             <button type="button" className="btn danger" onClick={() => remove.mutate(current.id)} disabled={busy}>
               {remove.isPending ? "Deleting…" : "Delete deck"}
             </button>
           </div>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
         </div>
-      )}
-
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
       )}
     </section>
   );

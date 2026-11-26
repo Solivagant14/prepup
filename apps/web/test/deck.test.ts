@@ -4,6 +4,8 @@ import {
   ALL_DECKS,
   cardFlags,
   cardLook,
+  deckLevel,
+  deckShade,
   eventLabel,
   explanationNote,
   freshnessText,
@@ -253,5 +255,16 @@ describe("test prompt", () => {
     expect(i).toMatch(/at the Intermediate level: ask how it works, when to use it, its trade-offs/);
     expect(a).toMatch(/at the Advanced level: ask about edge cases/);
     expect(new Set([b, i, a]).size).toBe(3);
+  });
+});
+
+describe("deck colours", () => {
+  it("shades a deck by its average score, like its cards", () => {
+    expect(deckShade([])).toBe("transparent");
+    expect(deckShade([topic({ score: 0 }), topic({ score: 0 })])).toBe("#F4F4F5");
+    expect(deckShade([topic({ score: 4 }), topic({ score: 5 })])).toBe(RAMP[4]);
+    expect(deckShade([topic({ score: 1 }), topic({ score: 2 })])).toBe(RAMP[1]);
+    expect(deckLevel([])).toBe("empty");
+    expect(deckLevel([topic({ score: 3 })])).toBe("mostly Getting there");
   });
 });
