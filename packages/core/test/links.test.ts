@@ -383,7 +383,7 @@ describe("similar topics and search", () => {
 describe("fixed rules for links", () => {
   it("tells Claude to ask before linking and to test weaker prerequisites first", () => {
     const ids = FIXED_RULES.map((r) => r.id);
-    expect(ids).toEqual(["pick", "prerequisites-first", "one-at-a-time", "no-peeking", "score", "draft", "confirm", "record", "link"]);
+    expect(ids).toEqual(["pick", "prerequisites-first", "one-at-a-time", "no-peeking", "level", "score", "draft", "confirm", "record", "link"]);
     expect(new Set(ids).size).toBe(ids.length);
     const byId = Object.fromEntries(FIXED_RULES.map((r) => [r.id, r]));
     const text0 = buildInstructions("Short and strict.");

@@ -106,6 +106,10 @@ export const topicSettings = pgTable(
       .notNull()
       .default("medium"),
     explanation: text("explanation").notNull().default(""),
+    /** The level this person tests the topic at now. A 5 from a test moves it up; they can change it on the card. */
+    understanding: text("understanding", { enum: ["beginner", "intermediate", "advanced"] })
+      .notNull()
+      .default("beginner"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.topicId] })],
@@ -180,6 +184,8 @@ export const reviewEvents = pgTable(
     userId: uuid("user_id").notNull(),
     kind: text("kind", { enum: ["claude_test", "manual_edit", "explanation"] }).notNull(),
     score: integer("score"),
+    /** The understanding level a score is for. Null exactly for explanation changes. */
+    understanding: text("understanding", { enum: ["beginner", "intermediate", "advanced"] }),
     explained: boolean("explained").notNull().default(false),
     feedback: text("feedback"),
     text: text("text"),
@@ -191,6 +197,7 @@ export const reviewEvents = pgTable(
     check("review_events_score_range", sql`${t.score} IS NULL OR ${t.score} BETWEEN 0 AND 5`),
     // 0 resets a topic to "Not tested yet"; only you can set it, never a test.
     check("review_events_zero_is_manual", sql`${t.score} IS DISTINCT FROM 0 OR ${t.kind} = 'manual_edit'`),
+    check("review_events_level_matches_kind", sql`(${t.kind} = 'explanation') = (${t.understanding} IS NULL)`),
     check(
       "review_events_score_matches_kind",
       sql`(${t.kind} = 'explanation') = (${t.score} IS NULL)`,

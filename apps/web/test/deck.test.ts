@@ -41,6 +41,12 @@ const topic = (over: Partial<TopicView>): TopicView => ({
   buildsOn: [],
   neededFor: [],
   needsLinks: false,
+  understanding: "beginner",
+  levels: [
+    { understanding: "beginner", score: 1 },
+    { understanding: "intermediate", score: 0 },
+    { understanding: "advanced", score: 0 },
+  ],
   ...over,
 });
 

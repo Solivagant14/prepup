@@ -26,6 +26,8 @@ import {
   SIMILAR_TOPICS_LIMIT,
   UpdateSettingsInput,
   UpdateTopicInput,
+  nextUnderstanding,
+  UNDERSTANDING_LEVELS,
   type DeckRef,
   type DeckView,
   type EventSource,
@@ -34,6 +36,7 @@ import {
   type TopicFilter,
   type TopicRef,
   type TopicView,
+  type Understanding,
   type UserSettingsView,
 } from "@prepup/contracts";
 import type { z } from "zod";
@@ -213,25 +216,36 @@ export class PrepUpService {
     const topic = await this.findByTerm(actor, term, deck);
     const now = this.clock();
     const event = this.event(actor, topic.id, "mcp", now);
-    const events: NewEvent[] = [{ ...event, kind: "claude_test", score, explained, feedback, text: answer ?? null }];
+    // The test is at the topic's current level, and its score is that level's.
+    const events: NewEvent[] = [
+      { ...event, kind: "claude_test", score, understanding: topic.understanding, explained, feedback, text: answer ?? null },
+    ];
     const changesExplanation = explanation !== undefined && explanation !== topic.explanation;
     if (changesExplanation) {
       // One millisecond later, so history lists the explanation right after the test that produced it.
       events.push({ ...event, kind: "explanation", text: explanation, createdAt: new Date(now.getTime() + 1) });
     }
+    // A 5 at one level moves the topic up to the next, where it starts at 0.
+    const movesUp = score === 5 ? nextUnderstanding(topic.understanding) : null;
+    const patch = { ...(changesExplanation ? { explanation } : {}), ...(movesUp ? { understanding: movesUp } : {}) };
     await this.repo.applyChanges({
       events,
-      ...(changesExplanation ? { settings: { userId: actor.userId, topicId: topic.id, patch: { explanation }, now } } : {}),
+      ...(Object.keys(patch).length ? { settings: { userId: actor.userId, topicId: topic.id, patch, now } } : {}),
     });
     return this.view(actor, topic.id);
   }
 
-  /** A manual edit: changes the score you see, but the fade clock keeps running. */
+  /**
+   * A manual edit of the score at the topic's current level: changes the score
+   * you see, but the fade clock keeps running, and it never moves the level.
+   */
   async setScore(actor: Actor, topicId: string, input: unknown, source: EventSource): Promise<TopicView> {
     const { score } = parse(SetScoreInput, input);
-    await this.view(actor, topicId);
+    const topic = await this.view(actor, topicId);
     await this.repo.applyChanges({
-      events: [{ ...this.event(actor, topicId, source, this.clock()), kind: "manual_edit", score }],
+      events: [
+        { ...this.event(actor, topicId, source, this.clock()), kind: "manual_edit", score, understanding: topic.understanding },
+      ],
     });
     return this.view(actor, topicId);
   }
@@ -528,6 +542,7 @@ export class PrepUpService {
         id: e.id,
         kind: e.kind,
         score: e.score,
+        understanding: e.understanding,
         explained: e.explained,
         feedback: e.feedback,
         text: e.text,
@@ -544,6 +559,7 @@ export class PrepUpService {
       userId: actor.userId,
       kind: "manual_edit",
       score: null,
+      understanding: null,
       explained: false,
       feedback: null,
       text: null,
@@ -610,12 +626,15 @@ export function toView(
   links: TopicLinks = NO_LINKS,
   deck: DeckRef = { id: s.topic.deckId, name: DEFAULT_DECK_NAME },
 ): TopicView {
-  const state = computeScore({
-    lastScore: s.lastScore,
-    lastTestAt: s.lastTestAt,
-    createdAt: s.topic.createdAt,
-    now,
-  });
+  // Each level keeps its own score and fade clock; the topic shows its current level's.
+  const at = (level: Understanding) =>
+    computeScore({
+      lastScore: s.levels[level].lastScore,
+      lastTestAt: s.levels[level].lastTestAt,
+      createdAt: s.topic.createdAt,
+      now,
+    });
+  const state = at(s.understanding);
   return {
     id: s.topic.id,
     term: s.topic.term,
@@ -625,10 +644,12 @@ export function toView(
     explanation: s.explanation,
     explanationBy: s.lastExplanation ? (s.lastExplanation.source === "mcp" ? "claude" : "you") : null,
     explanationUpdatedAt: s.lastExplanation?.at.toISOString() ?? null,
+    understanding: s.understanding,
     score: state.score,
     level: levelName(state.score),
+    levels: UNDERSTANDING_LEVELS.map((l) => ({ understanding: l, score: l === s.understanding ? state.score : at(l).score })),
     createdAt: s.topic.createdAt.toISOString(),
-    lastTestedAt: s.lastTestAt?.toISOString() ?? null,
+    lastTestedAt: s.levels[s.understanding].lastTestAt?.toISOString() ?? null,
     daysUntilDrop: state.daysUntilDrop,
     fadingSoon: state.fadingSoon,
     fadingThisWeek: state.fadingThisWeek,

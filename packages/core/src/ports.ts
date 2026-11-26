@@ -3,7 +3,7 @@
  * the Postgres adapter in @prepup/db and the in-memory adapter used in tests
  * both implement this interface.
  */
-import type { EventKind, EventSource, HostUsage, Importance, Score, TopicRef } from "@prepup/contracts";
+import type { EventKind, EventSource, HostUsage, Importance, ShownScore, TopicRef, Understanding } from "@prepup/contracts";
 import type { LinkPair } from "./links.js";
 
 /** A named group of topics, like "DSA". Every topic is in exactly one deck. */
@@ -34,10 +34,20 @@ export interface TopicState {
   topic: TopicRecord;
   importance: Importance;
   explanation: string;
-  lastScore: { score: Score; at: Date } | null;
-  lastTestAt: Date | null;
+  /** The level the person tests this topic at now; beginner until it moves up. */
+  understanding: Understanding;
+  /** What each level's score is computed from. A level never scored has both null. */
+  levels: Record<Understanding, LevelFacts>;
   /** The latest explanation change and where it came from. */
   lastExplanation: { at: Date; source: EventSource } | null;
+}
+
+/** The facts one level's score is computed from. */
+export interface LevelFacts {
+  /** The latest score at this level (a test is 1–5; a manual edit may be 0), or null if never scored there. */
+  lastScore: { score: ShownScore; at: Date } | null;
+  /** The latest test at this level. Only a test resets that level's fade clock. */
+  lastTestAt: Date | null;
 }
 
 export interface NewEvent {
@@ -45,7 +55,9 @@ export interface NewEvent {
   topicId: string;
   userId: string;
   kind: EventKind;
-  score: Score | null;
+  score: ShownScore | null;
+  /** The level a score is for; null for an explanation change. */
+  understanding: Understanding | null;
   explained: boolean;
   feedback: string | null;
   text: string | null;
@@ -60,6 +72,7 @@ export interface EventRecord extends NewEvent {
 export interface SettingsPatch {
   importance?: Importance;
   explanation?: string;
+  understanding?: Understanding;
 }
 
 /**

@@ -103,8 +103,32 @@ describe("PostgresRepository", () => {
         userId: me.userId,
         kind: "claude_test",
         score: 5,
+        understanding: "beginner",
         explained: false,
         source: "mcp",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("keeps a score per understanding level and refuses a score without its level", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    await service.recordReview(me, { term: "RAG", score: 5, explained: true, feedback: "Clear" });
+    const moved = await service.getTopic(me, topic.id);
+    expect(moved).toMatchObject({ understanding: "intermediate", score: 0 });
+    expect(moved.levels.map((l) => l.score)).toEqual([5, 0, 0]);
+    await service.recordReview(me, { term: "RAG", score: 2, feedback: "Partial" });
+    await service.updateTopic(me, topic.id, { understanding: "beginner" }, "web");
+    expect(await service.getTopic(me, topic.id)).toMatchObject({ understanding: "beginner", score: 5 });
+    expect((await service.history(me, topic.id)).map((e) => e.understanding)).toEqual(["intermediate", "beginner"]);
+    await expect(
+      db.insert(schema.reviewEvents).values({
+        workspaceId: me.workspaceId,
+        topicId: topic.id,
+        userId: me.userId,
+        kind: "manual_edit",
+        score: 3,
+        source: "web",
       }),
     ).rejects.toThrow();
   });
@@ -121,6 +145,7 @@ describe("PostgresRepository", () => {
         userId: me.userId,
         kind: "claude_test",
         score: 0,
+        understanding: "beginner",
         explained: false,
         source: "mcp",
       }),
@@ -199,6 +224,7 @@ describe("PostgresRepository", () => {
             userId: me.userId,
             kind: "claude_test",
             score: 5,
+            understanding: "beginner",
             explained: false, // violates the database's "a 5 must be earned" check
             feedback: null,
             text: null,

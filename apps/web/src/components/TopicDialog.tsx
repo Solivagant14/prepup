@@ -3,7 +3,15 @@
  * and the test prompt. The title and the main action stay in view while the
  * rest scrolls between them; on a phone it rises from the bottom as a sheet.
  */
-import type { DeckView, Importance, TopicRef, TopicView } from "@prepup/contracts";
+import {
+  UNDERSTANDING_LEVELS,
+  UNDERSTANDING_NAMES,
+  type DeckView,
+  type Importance,
+  type TopicRef,
+  type TopicView,
+  type Understanding,
+} from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type MouseEvent, type SyntheticEvent } from "react";
 import type { Api } from "../lib/api.js";
@@ -75,7 +83,8 @@ export function TopicDialog({ api, topic, topics, decks, onOpenTopic, onClose, o
   const onError = (e: Error) => setError(e.message);
 
   const update = useMutation({
-    mutationFn: (body: { importance?: Importance; explanation?: string }) => api.updateTopic(topic.id, body),
+    mutationFn: (body: { importance?: Importance; explanation?: string; understanding?: Understanding }) =>
+      api.updateTopic(topic.id, body),
     onSuccess: (saved) => {
       // Show the saved card at once, so "unsaved" clears without waiting for the deck to reload.
       qc.setQueryData<TopicView[]>(["topics"], (list) => list?.map((t) => (t.id === saved.id ? saved : t)));
@@ -384,9 +393,34 @@ export function TopicDialog({ api, topic, topics, decks, onOpenTopic, onClose, o
         </div>
 
         <div className="field">
+          <span className="field-label" id="understanding-label">
+            Understanding level
+          </span>
+          <div className="segmented" role="radiogroup" aria-labelledby="understanding-label">
+            {UNDERSTANDING_LEVELS.map((u) => (
+              <button
+                key={u}
+                type="button"
+                role="radio"
+                aria-checked={topic.understanding === u}
+                disabled={update.isPending}
+                onClick={() => topic.understanding !== u && update.mutate({ understanding: u })}
+              >
+                {UNDERSTANDING_NAMES[u]}
+              </button>
+            ))}
+          </div>
+          <span className="small">
+            Tests ask at this level, and each level keeps its own score:{" "}
+            {topic.levels.map((l) => `${UNDERSTANDING_NAMES[l.understanding]} ${l.score}/5`).join(" · ")}. A 5 from a test
+            moves it up a level.
+          </span>
+        </div>
+
+        <div className="field">
           <div className="fresh-row">
             <span className="field-label" id="score-label">
-              Confidence
+              Confidence at {UNDERSTANDING_NAMES[topic.understanding]}
             </span>
             <span className="small">tap to edit</span>
           </div>
@@ -542,7 +576,7 @@ export function TopicDialog({ api, topic, topics, decks, onOpenTopic, onClose, o
                   <time dateTime={e.createdAt}>{daysAgo(e.createdAt)}</time>
                   <span>
                     {eventLabel(e)}
-                    {e.score !== null && ` · ${e.score}/5`}
+                    {e.score !== null && ` · ${e.understanding ? `${UNDERSTANDING_NAMES[e.understanding]} ` : ""}${e.score}/5`}
                     {e.feedback && <span className="muted"> · {e.feedback}</span>}
                   </span>
                 </li>
