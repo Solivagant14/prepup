@@ -1,15 +1,17 @@
 /**
  * How a card looks, derived from its score. The deck darkens as you learn:
- * pale for Shaky, deep indigo for Can explain. While a card goes unreviewed
+ * light grey for Not tested yet (0), pale for Shaky, deep indigo for Can explain. While a card goes unreviewed
  * it slowly pales toward the level below; the countdown bar appears only in
  * the last 3 days before a drop.
  */
-import type { Importance, ReviewEventView, TopicRef, TopicView } from "@prepup/contracts";
+import { UNTESTED_LEVEL, type Importance, type ReviewEventView, type TopicRef, type TopicView } from "@prepup/contracts";
 // The link rules are the core's; this file only asks it. The import is pure functions, no server code.
 import { dependentsOf, prerequisitesFirst, type LinkPair } from "@prepup/core/links";
 
 export const LEVELS = ["Shaky", "Learning", "Getting there", "Confident", "Can explain"] as const;
 export const RAMP = ["#EEF0FF", "#C9CEFC", "#A5ACF8", "#4F46E5", "#312E81"] as const;
+/** A card that has never been tested or scored (score 0). */
+export const UNTESTED_COLOR = "#F4F4F5";
 export const FADE_DAYS = 14;
 export const COUNTDOWN_DAYS = 3;
 
@@ -46,7 +48,7 @@ export interface CardLook {
 }
 
 export function cardLook(t: Pick<TopicView, "score" | "daysUntilDrop" | "fadingSoon">): CardLook {
-  const base = RAMP[t.score - 1]!;
+  const base = t.score === 0 ? UNTESTED_COLOR : RAMP[t.score - 1]!;
   let background: string = base;
   if (t.score >= 2 && t.daysUntilDrop !== null) {
     const elapsed = Math.min(Math.max(FADE_DAYS - t.daysUntilDrop, 0), FADE_DAYS);
@@ -68,7 +70,7 @@ export type Tab = "all" | "prep" | "fading_week" | "confident";
 /** `short` is the label on a phone, where four full labels don't fit on one line. */
 export const TABS: { id: Tab; label: string; short?: string; hint: string }[] = [
   { id: "all", label: "All", hint: "Every topic, most urgent first. The darker your deck, the more you know." },
-  { id: "prep", label: "Prep now", hint: "Your weakest topics (score 1–2), most important first. What a topic builds on comes before it." },
+  { id: "prep", label: "Prep now", hint: "Your weakest and untested topics (score 0–2), most important first. What a topic builds on comes before it." },
   { id: "fading_week", label: "Fading this week", short: "Fading", hint: "Drops a level within 7 days unless you're tested on it." },
   { id: "confident", label: "Confident", hint: "Topics at 4 or 5." },
 ];
@@ -128,7 +130,7 @@ export interface Summary {
   total: number;
   confident: number;
   confidentPct: number;
-  byLevel: { name: (typeof LEVELS)[number]; color: string; count: number }[];
+  byLevel: { name: (typeof LEVELS)[number] | typeof UNTESTED_LEVEL; color: string; count: number }[];
   prep: number;
   fadingWeek: number;
 }
@@ -139,7 +141,10 @@ export function summarize(topics: TopicView[]): Summary {
     total: topics.length,
     confident,
     confidentPct: topics.length ? Math.round((confident / topics.length) * 100) : 0,
-    byLevel: LEVELS.map((name, i) => ({ name, color: RAMP[i]!, count: topics.filter((t) => t.score === i + 1).length })),
+    byLevel: [
+      { name: UNTESTED_LEVEL, color: UNTESTED_COLOR, count: topics.filter((t) => t.score === 0).length },
+      ...LEVELS.map((name, i) => ({ name, color: RAMP[i]!, count: topics.filter((t) => t.score === i + 1).length })),
+    ],
     prep: topics.filter(MATCH.prep).length,
     fadingWeek: topics.filter(MATCH.fading_week).length,
   };

@@ -30,11 +30,13 @@ describe("PrepUpService", () => {
     expect(await service.listTopics(me)).toHaveLength(1);
   });
 
-  it("starts new topics at Shaky with medium importance", async () => {
+  it("starts new topics at 0 (not tested yet) with medium importance", async () => {
     const { service } = setup();
     const me = await service.resolveActor("user-1");
     const { topic } = await service.addTopic(me, { term: "RAG", sourceUrl: "https://youtube.com/watch?v=x" });
-    expect(topic).toMatchObject({ score: 1, level: "Shaky", importance: "medium", daysUntilDrop: null });
+    expect(topic).toMatchObject({ score: 0, level: "Not tested yet", importance: "medium", daysUntilDrop: null });
+    // The first score, from a test or a manual edit, replaces the 0.
+    expect(await service.setScore(me, topic.id, { score: 1 }, "web")).toMatchObject({ score: 1, level: "Shaky" });
   });
 
   it("rejects invalid input with a readable message", async () => {
@@ -83,6 +85,19 @@ describe("PrepUpService", () => {
     const history = await service.history(me, topic.id);
     expect(history.map((e) => e.kind)).toEqual(["manual_edit", "claude_test"]);
     expect(history[0]).toMatchObject({ source: "web", score: 4 });
+  });
+
+  it("lets you set a topic back to 0, but a test always records 1 to 5", async () => {
+    const { service, advance } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "MCP" });
+    await service.recordReview(me, { term: "MCP", score: 3, feedback: "Solid" });
+    const reset = await service.setScore(me, topic.id, { score: 0 }, "web");
+    expect(reset).toMatchObject({ score: 0, level: "Not tested yet", daysUntilDrop: null, fadingSoon: false });
+    advance(60);
+    expect(await service.getTopic(me, topic.id)).toMatchObject({ score: 0 });
+    await expect(service.recordReview(me, { term: "MCP", score: 0, feedback: "Blank" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(service.setScore(me, topic.id, { score: 6 }, "web")).rejects.toMatchObject({ code: "invalid" });
   });
 
   it("filters and sorts by priority", async () => {
@@ -135,7 +150,7 @@ describe("PrepUpService", () => {
 
     // Capturing it again starts fresh.
     const again = await service.addTopic(alice, { term: "rag" });
-    expect(again).toMatchObject({ created: true, topic: { score: 1 } });
+    expect(again).toMatchObject({ created: true, topic: { score: 0 } });
   });
 
   it("deletes by term only when the user's confirmation is passed", async () => {

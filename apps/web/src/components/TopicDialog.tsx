@@ -289,7 +289,9 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
       <div className="sheet-scroll">
         <div className="fresh">
           <div className="fresh-row">
-            <span className="fresh-title">{fresh ?? "Not fading: it can't drop below 1"}</span>
+            <span className="fresh-title">
+              {fresh ?? (topic.score === 0 ? "Not fading: not tested yet" : "Not fading: it can't drop below 1")}
+            </span>
             <span className="small">{lastTested}</span>
           </div>
           {look.countdown !== null && (
@@ -328,14 +330,14 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
             <span className="small">tap to edit</span>
           </div>
           <div className="scores" role="radiogroup" aria-labelledby="score-label">
-            {[1, 2, 3, 4, 5].map((n) => (
+            {[0, 1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
                 type="button"
                 role="radio"
                 aria-checked={topic.score === n}
                 aria-label={`Set score to ${n}`}
-                className={`${n <= topic.score ? "on" : ""}${n === 5 ? " five" : ""}`}
+                className={`${(n === 0 ? topic.score === 0 : n <= topic.score) ? "on" : ""}${n === 0 ? " zero" : ""}${n === 5 ? " five" : ""}`}
                 disabled={score.isPending}
                 onClick={() => topic.score !== n && score.mutate(n)}
               >
@@ -344,7 +346,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
             ))}
           </div>
           <div className="scale-note">
-            <span>1–4 · understand it and answer questions</span>
+            <span>0 · not tested yet · 1–4 · understand it and answer questions</span>
             <span>5 · can explain it</span>
           </div>
           {edited && <span className="small">Saved as a manual edit · the fade clock keeps running</span>}

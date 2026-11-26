@@ -3,7 +3,7 @@
  * time from stored events, so nothing needs a cron job and the rules can
  * change without migrating data.
  */
-import { LEVEL_NAMES, type Importance, type Score } from "@prepup/contracts";
+import { LEVEL_NAMES, UNTESTED_LEVEL, UNTESTED_SCORE, type Importance, type LevelName, type Score, type ShownScore } from "@prepup/contracts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -16,8 +16,8 @@ export const WEEK_DAYS = 7;
 const IMPORTANCE_WEIGHT: Record<Importance, number> = { high: 3, medium: 2, low: 1 };
 
 export interface ScoreInputs {
-  /** The latest stored score (from a Claude test or a manual edit), or null if never scored. */
-  lastScore: { score: Score; at: Date } | null;
+  /** The latest stored score (a Claude test is 1–5; a manual edit may be 0), or null if never scored. */
+  lastScore: { score: ShownScore; at: Date } | null;
   /** When the card was last tested by Claude. Only this resets the fade clock. */
   lastTestAt: Date | null;
   createdAt: Date;
@@ -25,7 +25,8 @@ export interface ScoreInputs {
 }
 
 export interface ScoreState {
-  score: Score;
+  /** 0 when never scored or set to 0 by hand, otherwise 1–5. */
+  score: ShownScore;
   daysUntilDrop: number | null;
   fadingSoon: boolean;
   fadingThisWeek: boolean;
@@ -40,9 +41,13 @@ const clampScore = (n: number): Score => Math.min(5, Math.max(1, n)) as Score;
  * when it would have.
  */
 export function computeScore({ lastScore, lastTestAt, createdAt, now }: ScoreInputs): ScoreState {
+  // Never scored, or set back to 0 by hand: shows 0, and there is nothing to fade.
+  if (lastScore === null || lastScore.score === UNTESTED_SCORE) {
+    return { score: UNTESTED_SCORE, daysUntilDrop: null, fadingSoon: false, fadingThisWeek: false };
+  }
   const period = FADE_PERIOD_DAYS * DAY_MS;
   const anchor = (lastTestAt ?? createdAt).getTime();
-  const base = lastScore ?? { score: 1 as Score, at: createdAt };
+  const base = lastScore;
   const periodsAt = (t: number) => Math.floor(Math.max(0, t - anchor) / period);
 
   const drops = periodsAt(now.getTime()) - periodsAt(base.at.getTime());
@@ -61,11 +66,15 @@ export function computeScore({ lastScore, lastTestAt, createdAt, now }: ScoreInp
   };
 }
 
-export const levelName = (score: Score) => LEVEL_NAMES[score - 1]!;
+export const levelName = (score: ShownScore): LevelName =>
+  score === UNTESTED_SCORE ? UNTESTED_LEVEL : LEVEL_NAMES[score - 1]!;
 
-/** Higher = study sooner: important and weak first, plus a nudge for cards about to drop. */
+/**
+ * Higher = study sooner: important and weak first, plus a nudge for cards
+ * about to drop. An untested card (0) ranks the same as a score of 1.
+ */
 export function priority(importance: Importance, state: Pick<ScoreState, "score" | "fadingSoon">): number {
-  return IMPORTANCE_WEIGHT[importance] * (5 - state.score) + (state.fadingSoon ? 2 : 0);
+  return IMPORTANCE_WEIGHT[importance] * (5 - Math.max(1, state.score)) + (state.fadingSoon ? 2 : 0);
 }
 
 /**

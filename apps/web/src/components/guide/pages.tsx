@@ -372,7 +372,9 @@ function Scores() {
   return (
     <>
       <p className="guide-lead">
-        Every topic has one score from 1 to 5. The darker the card, the better you know it.
+        Every topic has one score from 1 to 5. The darker the card, the better you know it. A new topic shows{" "}
+        <strong>0</strong> (not tested yet) until its first test or until you set a score. You can also set a topic back to 0
+        yourself to start it over; a test always gives 1 to 5.
       </p>
 
       <ul className="levels">
@@ -404,7 +406,7 @@ function Scores() {
         <li>Only a test with your assistant restarts the {FADE_DAYS}-day clock.</li>
         <li>The card grows paler as the drop comes closer.</li>
         <li>In the last {COUNTDOWN_DAYS} days a rose bar on the card counts down.</li>
-        <li>A score of 1 can't drop further.</li>
+        <li>A score of 1 can't drop further, and a topic never drops back to 0.</li>
       </ul>
 
       <h2>Changing a score yourself</h2>

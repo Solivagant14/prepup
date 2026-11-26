@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { computeScore, normalizeTerm, priority } from "../src/scoring.js";
+import { computeScore, levelName, normalizeTerm, priority } from "../src/scoring.js";
 
 const day = (n: number) => new Date(Date.UTC(2026, 10, 1) + n * 86_400_000);
 
 describe("computeScore", () => {
-  it("starts a new card at 1, which cannot fade", () => {
+  it("starts a new card at 0 (not tested yet), which cannot fade", () => {
     const s = computeScore({ lastScore: null, lastTestAt: null, createdAt: day(0), now: day(40) });
-    expect(s).toEqual({ score: 1, daysUntilDrop: null, fadingSoon: false, fadingThisWeek: false });
+    expect(s).toEqual({ score: 0, daysUntilDrop: null, fadingSoon: false, fadingThisWeek: false });
+    expect(levelName(s.score)).toBe("Not tested yet");
+  });
+
+  it("treats a manual 0 like a new card: 0, and nothing to fade", () => {
+    const reset = { lastScore: { score: 0 as const, at: day(20) }, lastTestAt: day(5), createdAt: day(0) };
+    expect(computeScore({ ...reset, now: day(100) })).toEqual({ score: 0, daysUntilDrop: null, fadingSoon: false, fadingThisWeek: false });
+  });
+
+  it("never fades a scored card back to 0", () => {
+    const edited = { lastScore: { score: 2 as const, at: day(1) }, lastTestAt: null, createdAt: day(0) };
+    expect(computeScore({ ...edited, now: day(14) }).score).toBe(1);
+    expect(computeScore({ ...edited, now: day(400) }).score).toBe(1);
   });
 
   it("drops one step for every 14 days after a Claude test", () => {
@@ -52,6 +64,11 @@ describe("priority", () => {
     expect(priority("low", { score: 1, fadingSoon: false })).toBe(4);
     expect(priority("high", { score: 4, fadingSoon: true })).toBe(5);
     expect(priority("high", { score: 5, fadingSoon: false })).toBe(0);
+  });
+
+  it("ranks an untested card (0) the same as a score of 1", () => {
+    expect(priority("high", { score: 0, fadingSoon: false })).toBe(priority("high", { score: 1, fadingSoon: false }));
+    expect(priority("low", { score: 0, fadingSoon: false })).toBe(4);
   });
 });
 
