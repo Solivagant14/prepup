@@ -89,6 +89,23 @@ export const linkPairs = (topics: TopicView[]): LinkPair[] =>
   topics.flatMap((t) => t.buildsOn.map((p) => ({ topicId: t.id, buildsOnId: p.id })));
 
 /** The cards a tab shows, in order. Prep now puts prerequisites ahead of what builds on them, as the server does. */
+/**
+ * The colour of a deck in the deck row: the card colour of its average score,
+ * so a deck you know well looks as dark as its cards. An empty deck is blank.
+ */
+export function deckShade(topics: Pick<TopicView, "score">[]): string {
+  if (topics.length === 0) return "transparent";
+  const average = Math.round(topics.reduce((sum, t) => sum + t.score, 0) / topics.length);
+  return average === 0 ? UNTESTED_COLOR : RAMP[average - 1]!;
+}
+
+/** The level word that goes with a deck's shade, for screen readers. */
+export function deckLevel(topics: Pick<TopicView, "score">[]): string {
+  if (topics.length === 0) return "empty";
+  const average = Math.round(topics.reduce((sum, t) => sum + t.score, 0) / topics.length);
+  return average === 0 ? "not tested yet" : `mostly ${LEVELS[average - 1]}`;
+}
+
 /** Which deck the page shows: one deck's id, or every deck. */
 export const ALL_DECKS = "all";
 export type DeckChoice = typeof ALL_DECKS | string;
