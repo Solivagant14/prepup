@@ -25,6 +25,8 @@ export interface TopicRecord {
   sourceUrl: string | null;
   createdBy: string;
   createdAt: Date;
+  /** When an assistant last checked what this topic builds on; null if never (or since it moved deck). */
+  linksCheckedAt: Date | null;
 }
 
 /** One topic plus everything one person's view of it is computed from. */
@@ -102,7 +104,8 @@ export interface PrepUpRepository {
   findTopicsByNormalizedTerm(workspaceId: string, normalizedTerm: string): Promise<TopicRecord[]>;
   /**
    * Moves a topic to another deck of the same workspace and removes its links,
-   * as one unit of work (links stay inside one deck). Returns false if the
+   * as one unit of work (links stay inside one deck). Its links count as not
+   * checked again, since its new deck has other topics. Returns false if the
    * topic or deck isn't in this workspace. The caller checks the term is free there.
    */
   moveTopic(workspaceId: string, topicId: string, deckId: string): Promise<boolean>;
@@ -139,6 +142,12 @@ export interface PrepUpRepository {
   /** The user's saved testing style, or null if they never changed the default. */
   getTestingStyle(userId: string): Promise<{ text: string; updatedAt: Date } | null>;
   saveTestingStyle(userId: string, text: string, now: Date): Promise<void>;
+  /** Whether the user lets their assistant link new topics without asking. False until they turn it on. */
+  getAutoLink(userId: string): Promise<boolean>;
+  saveAutoLink(userId: string, autoLink: boolean, now: Date): Promise<void>;
+
+  /** Records that an assistant checked what these topics build on. Ignores ids outside the workspace. */
+  markLinksChecked(workspaceId: string, topicIds: string[], at: Date): Promise<void>;
 
   /**
    * "Erase all my data": removes the user's personal workspace with every topic in

@@ -344,6 +344,7 @@ describe("MCP", () => {
       "link_topics",
       "list_decks",
       "list_topics",
+      "mark_topics_linked",
       "move_topic",
       "record_review",
       "rename_deck",
@@ -352,7 +353,7 @@ describe("MCP", () => {
       "whoami",
     ]);
     const prompts = await mcp(USER, "prompts/list");
-    expect(prompts.result.prompts.map((p: { name: string }) => p.name).sort()).toEqual(["quick_capture", "test_me"]);
+    expect(prompts.result.prompts.map((p: { name: string }) => p.name).sort()).toEqual(["build_graph", "quick_capture", "test_me"]);
   });
 
   it("captures, tests and reports through the same core as REST", async () => {
@@ -635,7 +636,7 @@ describe("topic links over MCP", () => {
       annotations?: { readOnlyHint?: boolean };
     }>;
     const tool = (name: string) => tools.find((t) => t.name === name)!;
-    expect(tool("link_topics").description).toMatch(/Only call after the user has said yes/);
+    expect(tool("link_topics").description).toMatch(/Only call after the user has said yes to that link, unless they turned on automatic linking/);
     expect(tool("unlink_topics").description).toMatch(/Only call after the user has confirmed/);
     expect(tool("add_topic").description).toMatch(/links nothing itself/);
     expect(tool("link_topics").inputSchema.required).toEqual(["term", "buildsOnTerm"]);
@@ -651,7 +652,7 @@ describe("topic links over MCP", () => {
       capabilities: {},
       clientInfo: { name: "test", version: "1" },
     });
-    expect(init.result.serverInfo.version).toBe("0.6.0");
+    expect(init.result.serverInfo.version).toBe("0.7.0");
     expect(init.result.instructions).toMatch(/call link_topics only after they say yes/);
     expect(init.result.instructions).toMatch(/builds on is weaker, test that prerequisite first/);
   });
@@ -904,5 +905,63 @@ describe("decks", () => {
     expect(await (await app.request(`/api/decks/${other.id}`, as(USER, { method: "DELETE" }))).json()).toEqual({
       deleted: { name: "Systems", topicCount: 1 },
     });
+  });
+});
+
+describe("automatic linking", () => {
+  const call = async (user: string, name: string, args: Record<string, unknown>) => {
+    const res = await mcp(user, "tools/call", { name, arguments: args });
+    return { text: (res.result?.content?.[0]?.text ?? "") as string, isError: Boolean(res.result?.isError ?? res.error) };
+  };
+  const data = (text: string) => JSON.parse(text.slice(text.indexOf("\n\n") + 2));
+  const setAutoLink = (user: string, autoLink: boolean) =>
+    app.request("/api/settings", as(user, { method: "PUT", body: JSON.stringify({ autoLink }) }));
+
+  it("is off by default: add_topic asks the assistant to propose links", async () => {
+    expect(await (await app.request("/api/settings", as(USER))).json()).toMatchObject({ autoLink: false });
+    await call(USER, "add_topic", { term: "Vector databases" });
+    const added = await call(USER, "add_topic", { term: "Vector search" });
+    expect(added.text).toContain("ask the user before linking");
+    expect(added.text).not.toContain("Automatic linking is on");
+    expect((await call(USER, "whoami", {})).text).toContain("Automatic linking is off");
+  });
+
+  it("when on, hands the assistant the whole deck to link from, and tracks what still needs linking", async () => {
+    const saved = await setAutoLink(USER, true);
+    expect(await saved.json()).toMatchObject({ autoLink: true, preset: "interviewer" });
+    expect(await (await app.request("/api/settings", as(OTHER))).json()).toMatchObject({ autoLink: false });
+
+    const first = await call(USER, "add_topic", { term: "Arrays" });
+    expect(first.text).toContain("nothing to link yet");
+    await call(USER, "mark_topics_linked", { terms: ["Arrays"] });
+    // Added on the website: no assistant there, so it waits for the next chat.
+    await app.request("/api/topics", as(USER, { method: "POST", body: JSON.stringify({ term: "Strings" }) }));
+    const added = await call(USER, "add_topic", { term: "Sorting" });
+    expect(added.text).toContain('link "Sorting" now, without asking');
+    expect(data(added.text).deckTopics.sort()).toEqual(["Arrays", "Strings"]);
+
+    const who = await call(USER, "whoami", {});
+    expect(who.text).toContain("2 topic(s) still need linking");
+    expect(data((await call(USER, "list_topics", { filter: "needs_links" })).text).map((t: { term: string }) => t.term).sort()).toEqual([
+      "Sorting",
+      "Strings",
+    ]);
+    await call(USER, "link_topics", { term: "Sorting", buildsOnTerm: "Arrays" });
+    await call(USER, "mark_topics_linked", { terms: ["Strings"] });
+    expect(data((await call(USER, "list_topics", { filter: "needs_links" })).text)).toEqual([]);
+    expect((await call(USER, "whoami", {})).text).not.toContain("still need linking");
+
+    // The setting survives a change of testing style, and the style survives the setting.
+    await app.request("/api/settings", as(USER, { method: "PUT", body: JSON.stringify({ testingStyle: "Quiz me fast." }) }));
+    expect(await (await app.request("/api/settings", as(USER))).json()).toMatchObject({ autoLink: true, testingStyle: "Quiz me fast." });
+    expect(await (await setAutoLink(USER, false)).json()).toMatchObject({ autoLink: false, testingStyle: "Quiz me fast." });
+  });
+
+  it("offers a Build my graph prompt that asks first unless automatic linking is on", async () => {
+    const ask = await mcp(USER, "prompts/get", { name: "build_graph", arguments: { deck: "DSA" } });
+    expect(ask.result.messages[0].content.text).toMatch(/my deck "DSA".*link them only after I say yes/s);
+    await setAutoLink(USER, true);
+    const auto = await mcp(USER, "prompts/get", { name: "build_graph", arguments: {} });
+    expect(auto.result.messages[0].content.text).toMatch(/each of my PrepUp decks.*without asking.*mark_topics_linked.*study plan/s);
   });
 });

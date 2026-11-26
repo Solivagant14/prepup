@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { Api } from "../lib/api.js";
 import { signedInLabel, type AccountInfo } from "../lib/account.js";
+import { AutoLink } from "./AutoLink.js";
 import { TestingStyle } from "./TestingStyle.js";
 
 export function Settings({ api, account, onSignOut }: { api: Api; account: AccountInfo | null; onSignOut?: () => void }) {
@@ -22,7 +23,10 @@ export function Settings({ api, account, onSignOut }: { api: Api; account: Accou
       ) : setup.isError || !setup.data ? (
         <p className="error">{(setup.error as Error | null)?.message ?? "Could not load your testing style"}</p>
       ) : (
-        <TestingStyle api={api} info={setup.data} />
+        <>
+          <TestingStyle api={api} info={setup.data} />
+          <AutoLink api={api} on={setup.data.settings.autoLink} />
+        </>
       )}
 
       <section className="panel" aria-labelledby="who-title">

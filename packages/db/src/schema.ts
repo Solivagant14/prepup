@@ -84,6 +84,8 @@ export const topics = pgTable(
     sourceUrl: text("source_url"),
     createdBy: uuid("created_by").notNull(),
     createdAt: createdAt(),
+    /** When an assistant last checked what this topic builds on. Null: not checked yet (new, or moved to another deck). */
+    linksCheckedAt: timestamp("links_checked_at", { withTimezone: true }),
   },
   // Duplicate captures merge: the same normalized term can exist once per deck (and in several decks).
   (t) => [
@@ -138,12 +140,15 @@ export const topicLinks = pgTable(
   ],
 );
 
-/** Personal settings that aren't about one topic. Today: how the user wants to be tested. */
+/** Personal settings that aren't about one topic: how the user wants to be tested, and automatic linking. */
 export const userSettings = pgTable(
   "user_settings",
   {
     userId: uuid("user_id").primaryKey(),
-    testingStyle: text("testing_style").notNull(),
+    /** Null until the user saves a style of their own (they get the default). */
+    testingStyle: text("testing_style"),
+    /** Whether their assistant may link new topics to their prerequisites without asking first. Off unless they turn it on. */
+    autoLink: boolean("auto_link").notNull().default(false),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check("user_settings_style_length", sql`char_length(${t.testingStyle}) BETWEEN 1 AND 1500`)],

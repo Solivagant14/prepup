@@ -75,4 +75,5 @@ export const PHRASES = {
   link: "What does RAG build on? Link them in PrepUp",
   deck: "Make a DSA deck in PrepUp and add Arrays and Strings to it",
   testDeck: "Test me on my DSA deck",
+  buildGraph: "Build my PrepUp graph",
 } as const;

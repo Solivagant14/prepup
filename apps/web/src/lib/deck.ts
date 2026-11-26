@@ -191,6 +191,24 @@ export function daysAgo(iso: string, now = Date.now()): string {
 export const testPrompt = (term: string) =>
   `Use PrepUp to test me on "${term}", then suggest a score for me to confirm.`;
 
+/**
+ * What the Graph view's "Link topics" button copies for the person to paste
+ * into a chat with their assistant. PrepUp can't start that chat itself: an
+ * assistant only reaches PrepUp while someone is talking to it.
+ */
+export const linkPrompt = (deckName?: string) =>
+  `Build my PrepUp learning graph${deckName ? ` for the "${deckName}" deck` : ", one deck at a time"}. ` +
+  "Link each topic only to the topics it directly builds on, in the same deck, so the graph reads in the order to learn them. " +
+  "Add no topics, keep the links already there, and ask me before linking unless automatic linking is on. " +
+  "Then mark the topics as checked, and give me a short study plan: which topic to start with and the order after it.";
+
+/**
+ * The order to learn a deck in, from its links: a topic comes after
+ * everything it builds on. Otherwise the deck's own order holds (most urgent
+ * first), so weak and important topics come early. Pure: no assistant needed.
+ */
+export const studyOrder = (topics: TopicView[]): TopicView[] => prerequisitesFirst(topics, linkPairs(topics));
+
 export const IMPORTANCES: Importance[] = ["high", "medium", "low"];
 
 /** Says who wrote the current explanation, so one an assistant drafted is never mistaken for your own typing. */

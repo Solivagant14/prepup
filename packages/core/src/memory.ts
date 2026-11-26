@@ -23,6 +23,7 @@ export class InMemoryRepository implements PrepUpRepository {
   private settings = new Map<string, { importance: Importance; explanation: string }>();
   private events: EventRecord[] = [];
   private styles = new Map<string, { text: string; updatedAt: Date }>();
+  private autoLinks = new Map<string, boolean>();
   private links: TopicLink[] = [];
 
   async ensurePersonalWorkspace(userId: string): Promise<string> {
@@ -86,6 +87,7 @@ export class InMemoryRepository implements PrepUpRepository {
       throw new Error("term taken in that deck");
     }
     topic.deckId = deckId;
+    topic.linksCheckedAt = null;
     this.links = this.links.filter((l) => l.topicId !== topicId && l.buildsOnId !== topicId);
     return true;
   }
@@ -181,8 +183,21 @@ export class InMemoryRepository implements PrepUpRepository {
     this.styles.set(userId, { text, updatedAt: now });
   }
 
+  async getAutoLink(userId: string) {
+    return this.autoLinks.get(userId) ?? false;
+  }
+
+  async saveAutoLink(userId: string, autoLink: boolean) {
+    this.autoLinks.set(userId, autoLink);
+  }
+
+  async markLinksChecked(workspaceId: string, topicIds: string[], at: Date) {
+    for (const t of this.topics) if (t.workspaceId === workspaceId && topicIds.includes(t.id)) t.linksCheckedAt = at;
+  }
+
   async deleteUserData(userId: string) {
     this.styles.delete(userId);
+    this.autoLinks.delete(userId);
     const workspaceId = this.workspaces.get(userId);
     this.workspaces.delete(userId);
     const gone = new Set(this.topics.filter((t) => t.workspaceId === workspaceId).map((t) => t.id));
