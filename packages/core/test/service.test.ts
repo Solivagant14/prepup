@@ -70,7 +70,9 @@ describe("PrepUpService", () => {
       code: "rule",
     });
     const ok = await service.recordReview(me, { term: "Embeddings", score: 5, explained: true, feedback: "Clear" });
-    expect(ok.level).toBe("Can explain");
+    // The 5 is kept at Beginner, and the topic moves up to Intermediate.
+    expect(ok.levels[0]).toEqual({ understanding: "beginner", score: 5 });
+    expect(ok.understanding).toBe("intermediate");
   });
 
   it("does not reset the fade clock on a manual edit, and labels it in history", async () => {

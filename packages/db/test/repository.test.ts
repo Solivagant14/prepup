@@ -137,6 +137,7 @@ describe("PostgresRepository", () => {
     const me = await service.resolveActor(randomUUID());
     const { topic } = await service.addTopic(me, { term: "RAG" });
     await service.recordReview(me, { term: "RAG", score: 3, feedback: "Good" });
+    advance(1); // Postgres orders events by time; two in the same instant could come back either way.
     expect(await service.setScore(me, topic.id, { score: 0 }, "web")).toMatchObject({ score: 0, level: "Not tested yet" });
     await expect(
       db.insert(schema.reviewEvents).values({
