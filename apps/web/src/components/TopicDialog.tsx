@@ -246,10 +246,10 @@ export function TopicDialog({ api, topic, topics, decks, onOpenTopic, onClose, o
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(testPrompt(topic.term));
+      await navigator.clipboard.writeText(testPrompt(topic.term, topic.understanding));
       setCopied(true);
     } catch {
-      setError("Couldn't copy. Ask your assistant: " + testPrompt(topic.term));
+      setError("Couldn't copy. Ask your assistant: " + testPrompt(topic.term, topic.understanding));
     }
   };
 

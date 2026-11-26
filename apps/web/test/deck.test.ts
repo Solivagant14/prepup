@@ -19,6 +19,7 @@ import {
   studyOrder,
   summarize,
   TABS,
+  testPrompt,
 } from "../src/lib/deck.js";
 
 const topic = (over: Partial<TopicView>): TopicView => ({
@@ -240,5 +241,17 @@ describe("linking the whole deck", () => {
       "Dynamic programming",
       "Graphs",
     ]);
+  });
+});
+
+describe("test prompt", () => {
+  it("asks for a different kind of test at each understanding level", () => {
+    const [b, i, a] = (["beginner", "intermediate", "advanced"] as const).map((l) => testPrompt("RAG", l));
+    expect(b).toBe(
+      'Use PrepUp to test me on "RAG" at the Beginner level: ask what it is, why it matters and for a simple example. Then suggest a score for me to confirm.',
+    );
+    expect(i).toMatch(/at the Intermediate level: ask how it works, when to use it, its trade-offs/);
+    expect(a).toMatch(/at the Advanced level: ask about edge cases/);
+    expect(new Set([b, i, a]).size).toBe(3);
   });
 });

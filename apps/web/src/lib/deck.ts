@@ -4,7 +4,7 @@
  * it slowly pales toward the level below; the countdown bar appears only in
  * the last 3 days before a drop.
  */
-import { UNTESTED_LEVEL, type Importance, type ReviewEventView, type TopicRef, type TopicView } from "@prepup/contracts";
+import { UNDERSTANDING_NAMES, UNTESTED_LEVEL, type Understanding, type Importance, type ReviewEventView, type TopicRef, type TopicView } from "@prepup/contracts";
 // The link rules are the core's; this file only asks it. The import is pure functions, no server code.
 import { dependentsOf, prerequisitesFirst, type LinkPair } from "@prepup/core/links";
 
@@ -171,8 +171,16 @@ export function daysAgo(iso: string, now = Date.now()): string {
   return d <= 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`;
 }
 
-export const testPrompt = (term: string) =>
-  `Use PrepUp to test me on "${term}", then suggest a score for me to confirm.`;
+/** What each understanding level's test asks about, in the words the card's test prompt uses. */
+const LEVEL_ASKS: Record<Understanding, string> = {
+  beginner: "ask what it is, why it matters and for a simple example",
+  intermediate: "ask how it works, when to use it, its trade-offs, and give me a problem to apply it to",
+  advanced: "ask about edge cases, how it works inside, design decisions, and how it compares with the alternatives",
+};
+
+/** What a card's "Copy test prompt" copies: a test on this topic at its current understanding level. */
+export const testPrompt = (term: string, level: Understanding = "beginner") =>
+  `Use PrepUp to test me on "${term}" at the ${UNDERSTANDING_NAMES[level]} level: ${LEVEL_ASKS[level]}. Then suggest a score for me to confirm.`;
 
 /**
  * What the Graph view's "Link topics" button copies for the person to paste
