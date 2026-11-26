@@ -27,10 +27,10 @@ interface Props {
 const topicCount = (n: number) => (n === 0 ? "Empty" : n === 1 ? "1 topic" : `${n} topics`);
 
 /** Three card outlines, fanned; the top one (or all three, for All decks) filled with a colour. */
-function Stack({ shades, empty = false }: { shades: string[]; empty?: boolean }) {
+function Stack({ shades }: { shades: string[] }) {
   const [back, middle, top] = shades.length >= 3 ? shades : ["transparent", "transparent", shades[0] ?? "transparent"];
   return (
-    <span className={`deck-stack${empty ? " empty" : ""}`} aria-hidden="true">
+    <span className="deck-stack" aria-hidden="true">
       <span style={{ "--shade": back } as CSSProperties} />
       <span style={{ "--shade": middle } as CSSProperties} />
       <span style={{ "--shade": top } as CSSProperties} />
@@ -166,7 +166,7 @@ export function DeckBar({ api, decks, topics, selected, onSelect, onMessage }: P
               setMode({ kind: "new" });
             }}
           >
-            <Stack shades={[]} empty />
+            <span className="deck-plus" aria-hidden="true">+</span>
             <span className="deck-text">
               <span className="deck-name">New deck</span>
               <span className="deck-meta">Group topics</span>

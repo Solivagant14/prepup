@@ -569,7 +569,7 @@ details.more > :not(summary) { margin: 0 24px 22px; }
 .deck-row { display: flex; align-items: center; gap: 8px; }
 .deck-strip {
   flex: 1; min-width: 0; display: flex; gap: 8px; padding: 2px 2px 6px;
-  overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin;
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; scrollbar-width: thin;
 }
 .deck-tab {
   flex: none; scroll-snap-align: start; display: flex; align-items: center; gap: 12px;
@@ -596,7 +596,11 @@ details.more > :not(summary) { margin: 0 24px 22px; }
 .deck-stack span:nth-child(1) { transform: rotate(-14deg) translateX(-2px); }
 .deck-stack span:nth-child(2) { transform: rotate(-5deg); }
 .deck-stack span:nth-child(3) { transform: rotate(8deg) translateX(2px); }
-.deck-stack.empty span { border-style: dashed; }
+/* New deck: one empty dashed card with a plus, where a stack would be. */
+.deck-plus {
+  flex: none; display: grid; place-items: center; width: 18px; height: 24px; margin: 0 4px;
+  border: 1px dashed #b4b4bd; border-radius: 3px; font-size: 14px; line-height: 1; color: var(--ink-2);
+}
 .deck-tab:hover .deck-stack span:nth-child(3) { transform: rotate(14deg) translateX(3px); }
 @media (prefers-reduced-motion: reduce) {
   .deck-tab, .deck-stack span { transition: none; }
