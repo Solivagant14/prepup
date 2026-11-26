@@ -7,11 +7,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   AddTopicInput,
+  CreateDeckInput,
+  DeleteDeckInput,
   DeleteTopicInput,
   GetTopicInput,
   LinkTopicsInput,
   ListTopicsInput,
+  MoveTopicByNameInput,
   RecordReviewInput,
+  RenameDeckByNameInput,
   SearchTopicsInput,
   TOPIC_FILTERS,
   type TopicView,
@@ -35,25 +39,25 @@ export const TOOLS = {
   whoami: {
     title: "Check the PrepUp connection",
     description:
-      "Confirms the connection works, counts the user's topics, and returns their current testing style. Call it before the first test in a conversation.",
+      "Confirms the connection works, counts the user's topics, lists their decks, and returns their current testing style. Call it before the first test in a conversation.",
     readOnly: true,
   },
   add_topic: {
     title: "Add a topic",
     description:
-      "Add a term or concept to the user's PrepUp deck. Idempotent: if it already exists (even spelled differently), the existing card is returned. Also returns similar topics already in the deck (a plain text match), so you can propose what the new topic builds on. It links nothing itself.",
+      "Add a term or concept to one of the user's PrepUp decks. When they have more than one deck, pass deck (its name); if they haven't said which, ask. Idempotent: if the deck already has it (even spelled differently), the existing card is returned. Also returns similar topics already in that deck (a plain text match), so you can propose what the new topic builds on. It links nothing itself.",
     readOnly: false,
   },
   list_topics: {
     title: "List topics",
     description:
-      "List the user's topics, highest priority first (important, weak, or about to fade), each with the topics it builds on. With the prep filter, prerequisites come ahead of what builds on them. Use this to choose what to test.",
+      "List the user's topics, highest priority first (important, weak, or about to fade), each with its deck and the topics it builds on. Pass deck to list one deck only. With the prep filter, prerequisites come ahead of what builds on them. Use this to choose what to test.",
     readOnly: true,
   },
   get_topic: {
     title: "Read a topic",
     description:
-      "Read one topic in full, including the user's saved explanation, recent test feedback, what it builds on and what it is needed for. During a test, call this only after the user has answered, so you don't prompt them with their own notes.",
+      "Read one topic in full (pass deck if the term is in several decks), including the user's saved explanation, recent test feedback, what it builds on and what it is needed for. During a test, call this only after the user has answered, so you don't prompt them with their own notes.",
     readOnly: true,
   },
   record_review: {
@@ -65,13 +69,13 @@ export const TOOLS = {
   search_topics: {
     title: "Search topics",
     description:
-      "Find topics by words or part of a term (a plain text match), best match first. Use it when the deck is too big to list, or to check a topic's score without reading the user's explanation.",
+      "Find topics by words or part of a term (a plain text match), best match first, across every deck or in one deck. Use it when the deck is too big to list, or to check a topic's score without reading the user's explanation.",
     readOnly: true,
   },
   link_topics: {
     title: "Link a topic to what it builds on",
     description:
-      'Record that one topic builds on another: term builds on buildsOnTerm ("RAG" builds on "Embeddings"). Only call after the user has said yes to that link. Both topics must already be in the deck. A link that would make a loop is refused. Links never change a score or the fade clock. Safe to call twice.',
+      'Record that one topic builds on another: term builds on buildsOnTerm ("RAG" builds on "Embeddings"). Only call after the user has said yes to that link. Both topics must already be in the same deck: links stay inside one deck. A link that would make a loop is refused. Links never change a score or the fade clock. Safe to call twice.',
     readOnly: false,
   },
   unlink_topics: {
@@ -84,6 +88,36 @@ export const TOOLS = {
     title: "Delete a topic",
     description:
       "Permanently delete one topic from the user's deck, with its score history, explanation and links. It cannot be undone. Only call after the user has asked to delete this topic and, in chat, you have named it, said it is permanent, and they have said yes; then pass confirmed: true. Never delete on your own initiative. One topic per call.",
+    readOnly: false,
+  },
+  list_decks: {
+    title: "List decks",
+    description:
+      "List the user's decks (named groups of topics, like \"DSA\" or \"System Design\"), oldest first, with how many topics each holds.",
+    readOnly: true,
+  },
+  create_deck: {
+    title: "Create a deck",
+    description:
+      "Create a new, empty deck with the name the user chose. Only call after the user has asked for it or said yes to it in chat. Idempotent: a deck that already exists (even spelled differently) is returned unchanged.",
+    readOnly: false,
+  },
+  rename_deck: {
+    title: "Rename a deck",
+    description:
+      "Rename one of the user's decks. Its topics, scores and history stay as they are. Only call after the user has asked for it or said yes in chat.",
+    readOnly: false,
+  },
+  delete_deck: {
+    title: "Delete a deck",
+    description:
+      "Permanently delete one deck and every topic in it, with their score history, explanations and links. It cannot be undone. Only call after the user has asked to delete this deck and, in chat, you have named it, said how many topics it holds, said it is permanent, and they have said yes; then pass confirmed: true. Never delete on your own initiative.",
+    readOnly: false,
+  },
+  move_topic: {
+    title: "Move a topic to another deck",
+    description:
+      "Move one topic to another of the user's decks. Its score, history and explanation go with it; its \"builds on\" links are removed, because links stay inside one deck. Only call after the user has said yes in chat, and tell them first if it has links. The target deck must already exist and must not already have that term.",
     readOnly: false,
   },
 } as const;
@@ -115,6 +149,7 @@ const toolError = (message: string) => ({
 /** Keeps tool output small: Claude needs these fields, not internal ids for display. */
 const brief = (t: TopicView) => ({
   term: t.term,
+  deck: t.deck.name,
   score: t.score,
   level: t.level,
   importance: t.importance,
@@ -158,7 +193,7 @@ export async function testingStyleFor(service: PrepUpService, actor: Actor): Pro
  */
 export function createMcpServer(service: PrepUpService, actor: Actor, style: string = DEFAULT_TESTING_STYLE): McpServer {
   const server = new McpServer(
-    { name: "prepup", title: "PrepUp", version: "0.5.0" },
+    { name: "prepup", title: "PrepUp", version: "0.6.0" },
     { instructions: buildInstructions(style), capabilities: { tools: {}, prompts: {} } },
   );
 
@@ -167,11 +202,13 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
     { ...meta("whoami"), annotations: { readOnlyHint: true } },
     async () =>
       guard(async () => {
-        const topics = await service.listTopics(actor, { filter: "all", limit: 500 });
+        const decks = await service.listDecks(actor);
+        const topics = decks.reduce((n, d) => n + d.topicCount, 0);
         const style = await testingStyleFor(service, actor);
-        return toolResult(`Connected to PrepUp. ${topics.length} topic(s) in your deck.\n\n${styleBlock(style)}`, {
+        return toolResult(`Connected to PrepUp. ${topics} topic(s) in ${decks.length} deck(s).\n\n${styleBlock(style)}`, {
           userId: actor.userId,
-          topics: topics.length,
+          topics,
+          decks: decks.map((d) => ({ name: d.name, topics: d.topicCount })),
         });
       }),
   );
@@ -180,7 +217,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
     "add_topic",
     {
       ...meta("add_topic"),
-      inputSchema: AddTopicInput,
+      inputSchema: AddTopicInput.omit({ deckId: true }),
       annotations: { idempotentHint: true, destructiveHint: false },
     },
     async (input) =>
@@ -190,7 +227,9 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
           ? " Similar topics are listed below: if it builds on any of them (or on anything else in the deck), ask the user before linking."
           : "";
         return toolResult(
-          (created ? `Added "${topic.term}" to PrepUp.` : `"${topic.term}" was already in PrepUp; nothing changed.`) + hint,
+          (created
+            ? `Added "${topic.term}" to the deck "${topic.deck.name}".`
+            : `"${topic.term}" was already in the deck "${topic.deck.name}"; nothing changed.`) + hint,
           { ...brief(topic), similarTopics: similar.map((s) => s.term) },
         );
       }),
@@ -200,7 +239,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
     "list_topics",
     {
       ...meta("list_topics"),
-      inputSchema: ListTopicsInput,
+      inputSchema: ListTopicsInput.omit({ deckId: true }),
       annotations: { readOnlyHint: true },
     },
     async (input) =>
@@ -217,15 +256,15 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
       inputSchema: GetTopicInput,
       annotations: { readOnlyHint: true },
     },
-    async ({ term }) =>
+    async ({ term, deck }) =>
       guard(async () => {
-        const topic = await service.findByTerm(actor, term);
+        const topic = await service.findByTerm(actor, term, deck);
         const history = await service.history(actor, topic.id);
         const lastTests = history
           .filter((e) => e.kind === "claude_test")
           .slice(0, 3)
           .map((e) => ({ at: e.createdAt, score: e.score, feedback: e.feedback }));
-        return toolResult(`"${topic.term}": ${topic.score}/5 (${topic.level}).`, {
+        return toolResult(`"${topic.term}" (deck "${topic.deck.name}"): ${topic.score}/5 (${topic.level}).`, {
           ...brief(topic),
           explanation: topic.explanation || null,
           explanationWrittenBy: topic.explanationBy ? WHO[topic.explanationBy] : null,
@@ -302,6 +341,85 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
   );
 
   server.registerTool(
+    "list_decks",
+    { ...meta("list_decks"), annotations: { readOnlyHint: true } },
+    async () =>
+      guard(async () => {
+        const decks = await service.listDecks(actor);
+        return toolResult(
+          `${decks.length} deck(s).`,
+          decks.map((d) => ({ name: d.name, topics: d.topicCount })),
+        );
+      }),
+  );
+
+  server.registerTool(
+    "create_deck",
+    {
+      ...meta("create_deck"),
+      inputSchema: CreateDeckInput,
+      annotations: { idempotentHint: true, destructiveHint: false },
+    },
+    async (input) =>
+      guard(async () => {
+        const { deck, created } = await service.createDeck(actor, input);
+        return toolResult(
+          created ? `Created the deck "${deck.name}".` : `The deck "${deck.name}" already exists; nothing changed.`,
+          { name: deck.name, topics: deck.topicCount },
+        );
+      }),
+  );
+
+  server.registerTool(
+    "rename_deck",
+    {
+      ...meta("rename_deck"),
+      inputSchema: RenameDeckByNameInput,
+      annotations: { idempotentHint: true, destructiveHint: false },
+    },
+    async (input) =>
+      guard(async () => {
+        const { from, deck } = await service.renameDeckByName(actor, input);
+        return toolResult(`Renamed the deck "${from}" to "${deck.name}".`, { name: deck.name, topics: deck.topicCount });
+      }),
+  );
+
+  server.registerTool(
+    "delete_deck",
+    {
+      ...meta("delete_deck"),
+      inputSchema: DeleteDeckInput,
+      annotations: { destructiveHint: true, idempotentHint: false },
+    },
+    async (input) =>
+      guard(async () => {
+        const { name, topicCount } = await service.deleteDeckByName(actor, input);
+        return toolResult(`Deleted the deck "${name}" and its ${topicCount} topic(s). This can't be undone.`, {
+          name,
+          deletedTopics: topicCount,
+        });
+      }),
+  );
+
+  server.registerTool(
+    "move_topic",
+    {
+      ...meta("move_topic"),
+      inputSchema: MoveTopicByNameInput,
+      annotations: { idempotentHint: true, destructiveHint: false },
+    },
+    async (input) =>
+      guard(async () => {
+        const { topic, from, removedLinks } = await service.moveTopicByName(actor, input);
+        if (from.id === topic.deck.id) {
+          return toolResult(`"${topic.term}" is already in the deck "${topic.deck.name}"; nothing changed.`, brief(topic));
+        }
+        const links = removedLinks ? ` Its ${removedLinks} link(s) were removed, because links stay inside one deck.` : "";
+        return toolResult(`Moved "${topic.term}" from "${from.name}" to "${topic.deck.name}".${links}`, brief(topic));
+      }),
+  );
+
+  server.registerTool(
     "record_review",
     {
       ...meta("record_review"),
@@ -323,15 +441,16 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
       argsSchema: {
         focus: z.enum(TOPIC_FILTERS).optional().describe("Which topics: fading_week, prep, confident or all"),
         count: z.string().optional().describe("How many topics, e.g. 5"),
+        deck: z.string().optional().describe("Only this deck, by name, e.g. DSA. Leave empty for every deck"),
       },
     },
-    async ({ focus, count }) => ({
+    async ({ focus, count, deck }) => ({
       messages: [
         {
           role: "user",
           content: {
             type: "text",
-            text: `Test me on ${count ?? "5"} of my PrepUp topics (filter: ${focus ?? "fading_week"}; if that returns nothing, use "prep", then "all"). Follow PrepUp's fixed rules: one topic at a time, then suggest a score and a draft of my explanation in my own words, wait for my confirmation, then record both.\n\nHow I want to be tested:\n"""\n${await testingStyleFor(service, actor)}\n"""`,
+            text: `Test me on ${count ?? "5"} of my PrepUp topics${deck?.trim() ? ` in the deck "${deck.trim()}"` : ""} (filter: ${focus ?? "fading_week"}; if that returns nothing, use "prep", then "all"). Follow PrepUp's fixed rules: one topic at a time, then suggest a score and a draft of my explanation in my own words, wait for my confirmation, then record both.\n\nHow I want to be tested:\n"""\n${await testingStyleFor(service, actor)}\n"""`,
           },
         },
       ],
@@ -350,7 +469,7 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
           role: "user",
           content: {
             type: "text",
-            text: `Add these to PrepUp, one add_topic call each: ${terms}. Then tell me in one line which were new, and ask me before linking any of them to what they build on.`,
+            text: `Add these to PrepUp, one add_topic call each: ${terms}. If I have more than one deck and haven't said which, ask me first. Then tell me in one line which were new, and ask me before linking any of them to what they build on.`,
           },
         },
       ],

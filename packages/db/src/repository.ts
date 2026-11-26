@@ -6,6 +6,7 @@
 import type { Importance, Score } from "@prepup/contracts";
 import type {
   ChangeSet,
+  DeckRecord,
   EventRecord,
   LinkPair,
   PrepUpRepository,
@@ -19,6 +20,7 @@ import { and, count, desc, eq, isNotNull, or, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema.js";
 import {
+  decks,
   memberships,
   rateLimits,
   reviewEvents,
@@ -74,25 +76,98 @@ export class PostgresRepository implements PrepUpRepository {
     return id;
   }
 
+  async listDecks(workspaceId: string): Promise<DeckRecord[]> {
+    return this.db.select().from(decks).where(eq(decks.workspaceId, workspaceId)).orderBy(decks.createdAt);
+  }
+
+  async insertDeckIfAbsent(deck: Omit<DeckRecord, "id">) {
+    const [inserted] = await this.db
+      .insert(decks)
+      .values(deck)
+      .onConflictDoNothing({ target: [decks.workspaceId, decks.normalizedName] })
+      .returning();
+    if (inserted) return { record: inserted, created: true };
+    const [existing] = await this.db
+      .select()
+      .from(decks)
+      .where(and(eq(decks.workspaceId, deck.workspaceId), eq(decks.normalizedName, deck.normalizedName)))
+      .limit(1);
+    if (!existing) throw new Error("Deck insert conflicted but no existing deck was found");
+    return { record: existing, created: false };
+  }
+
+  async renameDeck(workspaceId: string, deckId: string, name: string, normalizedName: string): Promise<boolean> {
+    const updated = await this.db
+      .update(decks)
+      .set({ name, normalizedName })
+      .where(and(eq(decks.workspaceId, workspaceId), eq(decks.id, deckId)))
+      .returning({ id: decks.id });
+    return updated.length > 0;
+  }
+
+  /** Its topics go with it through ON DELETE CASCADE, and their settings, events and links with them. */
+  async deleteDeck(workspaceId: string, deckId: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(decks)
+      .where(and(eq(decks.workspaceId, workspaceId), eq(decks.id, deckId)))
+      .returning({ id: decks.id });
+    return deleted.length > 0;
+  }
+
   async insertTopicIfAbsent(topic: Omit<TopicRecord, "id">) {
+    // The deck must be this workspace's, whatever the caller checked.
+    const [deck] = await this.db
+      .select({ id: decks.id })
+      .from(decks)
+      .where(and(eq(decks.workspaceId, topic.workspaceId), eq(decks.id, topic.deckId)))
+      .limit(1);
+    if (!deck) throw new Error("A topic needs a deck in the same workspace");
     const [inserted] = await this.db
       .insert(topics)
       .values(topic)
-      .onConflictDoNothing({ target: [topics.workspaceId, topics.normalizedTerm] })
+      .onConflictDoNothing({ target: [topics.deckId, topics.normalizedTerm] })
       .returning();
     if (inserted) return { record: inserted, created: true };
-    const existing = await this.findTopicByNormalizedTerm(topic.workspaceId, topic.normalizedTerm);
+    const [existing] = await this.db
+      .select()
+      .from(topics)
+      .where(and(eq(topics.deckId, topic.deckId), eq(topics.normalizedTerm, topic.normalizedTerm)))
+      .limit(1);
     if (!existing) throw new Error("Topic insert conflicted but no existing topic was found");
     return { record: existing, created: false };
   }
 
-  async findTopicByNormalizedTerm(workspaceId: string, normalizedTerm: string): Promise<TopicRecord | null> {
-    const [row] = await this.db
+  async findTopicsByNormalizedTerm(workspaceId: string, normalizedTerm: string): Promise<TopicRecord[]> {
+    return this.db
       .select()
       .from(topics)
-      .where(and(eq(topics.workspaceId, workspaceId), eq(topics.normalizedTerm, normalizedTerm)))
-      .limit(1);
-    return row ?? null;
+      .where(and(eq(topics.workspaceId, workspaceId), eq(topics.normalizedTerm, normalizedTerm)));
+  }
+
+  /** One transaction: the topic changes deck and loses its links together, so no link ever spans two decks. */
+  async moveTopic(workspaceId: string, topicId: string, deckId: string): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      // The same lock links take, so a link can't be saved halfway through a move.
+      await tx.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, workspaceId)).for("update");
+      const [deck] = await tx
+        .select({ id: decks.id })
+        .from(decks)
+        .where(and(eq(decks.workspaceId, workspaceId), eq(decks.id, deckId)))
+        .limit(1);
+      if (!deck) return false;
+      const moved = await tx
+        .update(topics)
+        .set({ deckId })
+        .where(and(eq(topics.workspaceId, workspaceId), eq(topics.id, topicId)))
+        .returning({ id: topics.id });
+      if (moved.length === 0) return false;
+      await tx
+        .delete(topicLinks)
+        .where(
+          and(eq(topicLinks.workspaceId, workspaceId), or(eq(topicLinks.topicId, topicId), eq(topicLinks.buildsOnId, topicId))),
+        );
+      return true;
+    });
   }
 
   async countTopics(workspaceId: string): Promise<number> {
@@ -148,12 +223,13 @@ export class PostgresRepository implements PrepUpRepository {
   async insertLinkIfAbsent(link: TopicLink, check: (existing: LinkPair[]) => void): Promise<boolean> {
     return this.db.transaction(async (tx) => {
       await tx.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, link.workspaceId)).for("update");
-      // Both ends must be this workspace's topics, whatever the caller checked.
+      // Both ends must be this workspace's topics, in the same deck, whatever the caller checked.
       const ends = await tx
-        .select({ id: topics.id })
+        .select({ id: topics.id, deckId: topics.deckId })
         .from(topics)
         .where(and(eq(topics.workspaceId, link.workspaceId), or(eq(topics.id, link.topicId), eq(topics.id, link.buildsOnId))));
       if (ends.length !== 2) throw new Error("A link needs two different topics in the same workspace");
+      if (ends[0]!.deckId !== ends[1]!.deckId) throw new Error("A link needs two topics in the same deck");
       const existing = await tx
         .select({ topicId: topicLinks.topicId, buildsOnId: topicLinks.buildsOnId })
         .from(topicLinks)

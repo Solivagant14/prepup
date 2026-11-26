@@ -1,5 +1,13 @@
 /** A thin client for the PrepUp REST API. Every call carries the signed-in user's token. */
-import type { HostStatusView, OAuthProvider, ReviewEventView, TopicView, UserSettingsView } from "@prepup/contracts";
+import type {
+  DeckRef,
+  DeckView,
+  HostStatusView,
+  OAuthProvider,
+  ReviewEventView,
+  TopicView,
+  UserSettingsView,
+} from "@prepup/contracts";
 
 export interface AppConfig {
   authMode: "supabase" | "dev";
@@ -86,10 +94,21 @@ export function createApi(getToken: TokenSource, mode: AppConfig["authMode"]) {
 
   return {
     listTopics: () => call<TopicView[]>("/api/topics?limit=500"),
-    addTopic: async (term: string) => {
-      const { status, data } = await request<TopicView>("/api/topics", { method: "POST", body: { term } });
+    addTopic: async ({ term, deckId }: { term: string; deckId?: string }) => {
+      const { status, data } = await request<TopicView>("/api/topics", { method: "POST", body: { term, deckId } });
       return { topic: data, created: status === 201 };
     },
+    /** Moves a topic to another deck; its links are removed, because links stay inside one deck. */
+    moveTopic: (id: string, deckId: string) =>
+      call<{ topic: TopicView; from: DeckRef; removedLinks: number }>(`/api/topics/${id}/deck`, { method: "PUT", body: { deckId } }),
+    listDecks: () => call<DeckView[]>("/api/decks"),
+    createDeck: async (name: string) => {
+      const { status, data } = await request<DeckView>("/api/decks", { method: "POST", body: { name } });
+      return { deck: data, created: status === 201 };
+    },
+    renameDeck: (id: string, name: string) => call<DeckView>(`/api/decks/${id}`, { method: "PATCH", body: { name } }),
+    /** Deletes the deck and every topic in it. */
+    deleteDeck: (id: string) => call<{ deleted: { name: string; topicCount: number } }>(`/api/decks/${id}`, { method: "DELETE" }),
     updateTopic: (id: string, body: { importance?: string; explanation?: string }) =>
       call<TopicView>(`/api/topics/${id}`, { method: "PATCH", body }),
     setScore: (id: string, score: number) => call<TopicView>(`/api/topics/${id}/score`, { method: "PUT", body: { score } }),

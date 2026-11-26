@@ -1,11 +1,15 @@
 import type { TopicView } from "@prepup/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  ALL_DECKS,
   cardFlags,
   cardLook,
+  deckLevel,
+  deckShade,
   eventLabel,
   explanationNote,
   freshnessText,
+  inDeck,
   matches,
   mix,
   prefersLightText,
@@ -20,6 +24,7 @@ import {
 const topic = (over: Partial<TopicView>): TopicView => ({
   id: "t",
   term: "RAG",
+  deck: { id: "d1", name: "My deck" },
   sourceUrl: null,
   importance: "medium",
   explanation: "",
@@ -194,5 +199,27 @@ describe("what a card says", () => {
 describe("filters", () => {
   it("has a short label only where the full one is long", () => {
     expect(TABS.filter((t) => t.short).map((t) => [t.label, t.short])).toEqual([["Fading this week", "Fading"]]);
+  });
+});
+
+describe("decks", () => {
+  it("shows one deck, or every deck", () => {
+    const dsa = { id: "dsa", name: "DSA" };
+    const sys = { id: "sys", name: "System Design" };
+    const deck = [topic({ id: "a", deck: dsa }), topic({ id: "b", deck: sys }), topic({ id: "c", deck: dsa })];
+    expect(inDeck("dsa", deck).map((t) => t.id)).toEqual(["a", "c"]);
+    expect(inDeck(ALL_DECKS, deck)).toHaveLength(3);
+    expect(inDeck("gone", deck)).toEqual([]);
+  });
+});
+
+describe("deck colours", () => {
+  it("shades a deck by its average score, like its cards", () => {
+    expect(deckShade([])).toBe("transparent");
+    expect(deckShade([topic({ score: 0 }), topic({ score: 0 })])).toBe("#F4F4F5");
+    expect(deckShade([topic({ score: 4 }), topic({ score: 5 })])).toBe(RAMP[4]);
+    expect(deckShade([topic({ score: 1 }), topic({ score: 2 })])).toBe(RAMP[1]);
+    expect(deckLevel([])).toBe("empty");
+    expect(deckLevel([topic({ score: 3 })])).toBe("mostly Getting there");
   });
 });

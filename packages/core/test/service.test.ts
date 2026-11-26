@@ -348,3 +348,113 @@ describe("testing style", () => {
     for (const p of STYLE_PRESETS) expect(p.text.length).toBeLessThanOrEqual(1500);
   });
 });
+
+describe("decks", () => {
+  it("puts topics in the default deck until there are others, then asks which deck", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    expect(topic.deck.name).toBe("My deck");
+    expect(await service.listDecks(me)).toMatchObject([{ name: "My deck", topicCount: 1 }]);
+
+    const { deck, created } = await service.createDeck(me, { name: "DSA" });
+    expect(created).toBe(true);
+    expect((await service.createDeck(me, { name: "dsa" })).created).toBe(false);
+    await expect(service.addTopic(me, { term: "Arrays" })).rejects.toMatchObject({
+      code: "rule",
+      message: expect.stringContaining("Ask which deck"),
+    });
+    expect((await service.addTopic(me, { term: "Arrays", deck: "DSA" })).topic.deck).toEqual({ id: deck.id, name: "DSA" });
+    expect((await service.addTopic(me, { term: "Strings", deckId: deck.id })).topic.deck.name).toBe("DSA");
+    await expect(service.addTopic(me, { term: "Trees", deck: "Nope" })).rejects.toMatchObject({ code: "not_found" });
+    expect((await service.listDecks(me)).map((d) => [d.name, d.topicCount])).toEqual([
+      ["My deck", 1],
+      ["DSA", 2],
+    ]);
+  });
+
+  it("keeps the same term in two decks as separate topics, and asks which one when it's ambiguous", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    await service.createDeck(me, { name: "DSA" });
+    await service.createDeck(me, { name: "System Design" });
+    const a = await service.addTopic(me, { term: "Hashing", deck: "DSA" });
+    const b = await service.addTopic(me, { term: "hashing", deck: "System Design" });
+    expect(a.created && b.created).toBe(true);
+    expect(a.topic.id).not.toBe(b.topic.id);
+    expect((await service.addTopic(me, { term: "HASHING", deck: "DSA" })).created).toBe(false);
+
+    await expect(service.findByTerm(me, "Hashing")).rejects.toMatchObject({
+      code: "rule",
+      message: expect.stringContaining('"DSA", "System Design"'),
+    });
+    expect((await service.findByTerm(me, "Hashing", "system design")).id).toBe(b.topic.id);
+    await service.recordReview(me, { term: "Hashing", deck: "DSA", score: 3, feedback: "Good" });
+    expect((await service.getTopic(me, a.topic.id)).score).toBe(3);
+    expect((await service.getTopic(me, b.topic.id)).score).toBe(0);
+    expect((await service.listTopics(me, { deck: "DSA" })).map((t) => t.id)).toEqual([a.topic.id]);
+    expect((await service.searchTopics(me, { query: "hash", deck: "System Design" })).map((t) => t.id)).toEqual([b.topic.id]);
+    expect(await service.searchTopics(me, { query: "hash" })).toHaveLength(2);
+  });
+
+  it("keeps links inside one deck, and drops a topic's links when it moves", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    const dsa = (await service.createDeck(me, { name: "DSA" })).deck;
+    const sys = (await service.createDeck(me, { name: "System Design" })).deck;
+    const arrays = (await service.addTopic(me, { term: "Arrays", deck: "DSA" })).topic;
+    const sorting = (await service.addTopic(me, { term: "Sorting", deck: "DSA" })).topic;
+    const caching = (await service.addTopic(me, { term: "Caching", deck: "System Design" })).topic;
+
+    await expect(service.linkTopics(me, caching.id, { buildsOnId: arrays.id })).rejects.toMatchObject({
+      code: "rule",
+      message: expect.stringContaining("different decks"),
+    });
+    await expect(service.linkTopicsByTerm(me, { term: "Caching", buildsOnTerm: "Arrays" })).rejects.toMatchObject({
+      message: expect.stringContaining("Links stay inside one deck"),
+    });
+    await service.linkTopicsByTerm(me, { term: "Sorting", buildsOnTerm: "Arrays" });
+    await service.recordReview(me, { term: "Sorting", score: 2, feedback: "Partial" });
+
+    const moved = await service.moveTopic(me, sorting.id, { deckId: sys.id });
+    expect(moved).toMatchObject({ from: { id: dsa.id }, removedLinks: 1, topic: { deck: { name: "System Design" }, score: 2 } });
+    expect(moved.topic.buildsOn).toEqual([]);
+    expect((await service.getTopic(me, arrays.id)).neededFor).toEqual([]);
+    expect((await service.moveTopic(me, sorting.id, { deckId: sys.id })).removedLinks).toBe(0);
+
+    await service.addTopic(me, { term: "Caching", deck: "DSA" });
+    await expect(service.moveTopicByName(me, { term: "Caching", deck: "System Design", toDeck: "DSA" })).rejects.toMatchObject({
+      message: expect.stringContaining("already has"),
+    });
+    expect((await service.getTopic(me, caching.id)).deck.name).toBe("System Design");
+  });
+
+  it("renames decks without clashes, and deletes a deck with its topics", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    const dsa = (await service.createDeck(me, { name: "DSA" })).deck;
+    await service.createDeck(me, { name: "Systems" });
+    await service.addTopic(me, { term: "Arrays", deck: "DSA" });
+    await service.addTopic(me, { term: "Graphs", deck: "DSA" });
+
+    await expect(service.renameDeck(me, dsa.id, { name: "systems" })).rejects.toMatchObject({ code: "rule" });
+    expect(await service.renameDeck(me, dsa.id, { name: "dsa" })).toMatchObject({ name: "dsa", topicCount: 2 });
+    expect((await service.renameDeckByName(me, { deck: "DSA", newName: "Algorithms" })).deck.name).toBe("Algorithms");
+
+    await expect(service.deleteDeckByName(me, { deck: "Algorithms" })).rejects.toMatchObject({ code: "invalid" });
+    expect(await service.deleteDeckByName(me, { deck: "Algorithms", confirmed: true })).toEqual({ name: "Algorithms", topicCount: 2 });
+    expect((await service.listDecks(me)).map((d) => d.name)).toEqual(["Systems"]);
+    expect(await service.listTopics(me)).toEqual([]);
+  });
+
+  it("never shows or changes another person's decks", async () => {
+    const { service } = setup();
+    const alice = await service.resolveActor("alice");
+    const bob = await service.resolveActor("bob");
+    const hers = (await service.createDeck(alice, { name: "DSA" })).deck;
+    await expect(service.renameDeck(bob, hers.id, { name: "Mine" })).rejects.toMatchObject({ code: "not_found" });
+    await expect(service.deleteDeck(bob, hers.id)).rejects.toMatchObject({ code: "not_found" });
+    await expect(service.addTopic(bob, { term: "RAG", deckId: hers.id })).rejects.toMatchObject({ code: "not_found" });
+    expect((await service.listDecks(bob)).map((d) => d.name)).toEqual(["My deck"]);
+  });
+});

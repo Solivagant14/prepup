@@ -431,6 +431,58 @@ function Scores() {
   );
 }
 
+function Decks() {
+  return (
+    <>
+      <p className="guide-lead">
+        Decks group your topics by subject: a <strong>DSA</strong> deck for Arrays and Strings, a{" "}
+        <strong>System Design</strong> deck for Caching and Sharding. Each deck has its own cards, progress and graph.
+      </p>
+
+      <h2>On the Deck screen</h2>
+      <ul>
+        <li>
+          The row above the cards switches between your decks, or shows <strong>All decks</strong> together.
+        </li>
+        <li>
+          <strong>+ New deck</strong> makes a deck. With a deck open, <strong>Rename</strong> and{" "}
+          <strong>Delete deck</strong> appear below the row.
+        </li>
+        <li>A term you add goes into the open deck. From All decks, choose the deck next to the box.</li>
+        <li>
+          To move a card, open it and pick another <strong>Deck</strong>. Its score and history go with it.
+        </li>
+      </ul>
+      <Note>
+        Deleting a deck deletes every topic in it, with their history, and can't be undone. PrepUp asks first.
+      </Note>
+
+      <h2>With your assistant</h2>
+      <ul className="say-list">
+        <li>
+          <Say>{PHRASES.deck}</Say>
+          <span>It asks before making the deck.</span>
+        </li>
+        <li>
+          <Say>{PHRASES.testDeck}</Say>
+          <span>Tests only that deck.</span>
+        </li>
+      </ul>
+      <p>
+        With more than one deck, your assistant asks which deck a new term goes in if you haven't said. It makes,
+        renames or deletes a deck, or moves a topic, only after you say yes.
+      </p>
+
+      <h2>The same term in two decks</h2>
+      <p>
+        "Hashing" can be in both DSA and System Design. They are separate cards, each with its own score. Links stay
+        inside one deck, so a topic only builds on topics in its own deck, and moving a card to another deck removes
+        its links.
+      </p>
+    </>
+  );
+}
+
 function Links() {
   return (
     <>
@@ -446,6 +498,7 @@ function Links() {
         </li>
         <li>During a test, a weaker prerequisite is tested first.</li>
         <li>A link never changes a score, and never restarts the fade clock.</li>
+        <li>Links stay inside one deck.</li>
       </ul>
 
       <h2>Adding and removing links</h2>
@@ -652,10 +705,10 @@ function Troubleshooting({ links }: PageProps) {
             and carry on. The numbers are on the <Link to={PATHS.costs}>costs page</Link>.
           </p>
         </Problem>
-        <Problem title="“Your deck is full”">
+        <Problem title="“…topics, the most PrepUp allows”">
           <p>
-            A deck holds a fixed number of topics, shown on the <Link to={PATHS.costs}>costs page</Link>. Delete a
-            topic you no longer need to add another.
+            Each person can hold a fixed number of topics across all their decks, shown on the{" "}
+            <Link to={PATHS.costs}>costs page</Link>. Delete a topic you no longer need to add another.
           </p>
         </Problem>
       </div>
@@ -726,6 +779,7 @@ export const PAGES: Record<string, (props: PageProps) => ReactNode> = {
   connect: Connect,
   "first-test": FirstTest,
   scores: Scores,
+  decks: Decks,
   links: Links,
   assistant: Assistant,
   troubleshooting: Troubleshooting,

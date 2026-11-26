@@ -560,3 +560,67 @@ details.more > :not(summary) { margin: 0 24px 22px; }
 
 /* The whole screen given to one message, when PrepUp can't start. */
 .app-error { min-height: 100dvh; display: grid; place-items: center; margin: 0; padding: 16px; text-align: center; }
+
+/*
+ * Decks: a strip of decks above the deck page. Each deck is a small fanned
+ * stack of cards; the top card takes the colour of how well you know it.
+ */
+.deck-bar { display: flex; flex-direction: column; gap: 12px; }
+.deck-row { display: flex; align-items: center; gap: 8px; }
+.deck-strip {
+  flex: 1; min-width: 0; display: flex; gap: 8px; padding: 2px 2px 6px;
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; scrollbar-width: thin;
+}
+.deck-tab {
+  flex: none; scroll-snap-align: start; display: flex; align-items: center; gap: 12px;
+  min-width: 140px; max-width: 220px; height: 60px; padding: 0 16px 0 12px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); text-align: left;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.deck-tab:hover { border-color: #d4d4d8; }
+.deck-tab[aria-selected="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.deck-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.deck-name { font-size: 14px; font-weight: 500; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-meta { font-size: 12px; color: var(--muted); }
+.deck-add { border-style: dashed; background: transparent; color: var(--ink-2); }
+.deck-add .deck-name { font-weight: 400; }
+.deck-add[aria-pressed="true"] { border-color: var(--ink); border-style: solid; }
+
+/* The fanned stack: three card outlines, the back two tilted out. */
+.deck-stack { position: relative; flex: none; width: 26px; height: 30px; }
+.deck-stack span {
+  position: absolute; left: 5px; top: 3px; width: 16px; height: 22px; border-radius: 3px;
+  border: 1px solid #c4c4cc; background: var(--shade, transparent);
+  transform-origin: 50% 100%; transition: transform 160ms ease;
+}
+.deck-stack span:nth-child(1) { transform: rotate(-14deg) translateX(-2px); }
+.deck-stack span:nth-child(2) { transform: rotate(-5deg); }
+.deck-stack span:nth-child(3) { transform: rotate(8deg) translateX(2px); }
+/* New deck: one empty dashed card with a plus, where a stack would be. */
+.deck-plus {
+  flex: none; display: grid; place-items: center; width: 18px; height: 24px; margin: 0 4px;
+  border: 1px dashed #b4b4bd; border-radius: 3px; font-size: 14px; line-height: 1; color: var(--ink-2);
+}
+.deck-tab:hover .deck-stack span:nth-child(3) { transform: rotate(14deg) translateX(3px); }
+@media (prefers-reduced-motion: reduce) {
+  .deck-tab, .deck-stack span { transition: none; }
+}
+
+.deck-more { position: relative; flex: none; align-self: flex-start; margin-top: 10px; }
+.deck-more .menu { width: 200px; z-index: 5; }
+
+/* New deck, rename and delete open as a panel under the strip. */
+.deck-panel { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.deck-panel-title { margin: 0; font-size: 14px; font-weight: 500; }
+.deck-panel-note { margin: -6px 0 0; font-size: 13px; color: var(--ink-2); }
+.deck-panel .error { margin: 0; }
+.deck-form-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.deck-form-row input { flex: 1 1 240px; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 14px; }
+.deck-form-row input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15); }
+.deck-danger { border-color: #efc7d1; background: #fdf6f8; }
+@media (max-width: 640px) {
+  .deck-tab { min-width: 124px; height: 56px; }
+}
+.capture select { flex: none; max-width: 40%; height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 14px; }
+.card-deck { font-size: 11px; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.7; margin-bottom: -6px; }
+.deck-select { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }

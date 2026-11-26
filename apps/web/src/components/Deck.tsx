@@ -1,9 +1,10 @@
-/** The one main screen: capture, progress, filters and the card grid. */
+/** The one main screen: decks, capture, progress, filters and the card grid. */
 import type { TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState, type FormEvent } from "react";
 import type { Api } from "../lib/api.js";
-import { linkPairs, shownIn, startSteps, summarize, TABS, type Tab } from "../lib/deck.js";
+import { ALL_DECKS, inDeck, linkPairs, shownIn, startSteps, summarize, TABS, type DeckChoice, type Tab } from "../lib/deck.js";
+import { DeckBar } from "./DeckBar.js";
 import { GetStarted } from "./GetStarted.js";
 import { GraphBoard } from "./GraphBoard.js";
 import { TopicCard } from "./TopicCard.js";
@@ -27,6 +28,17 @@ function savedView(): ViewMode {
   }
 }
 
+const DECK_KEY = "prepup.deck";
+
+/** Which deck was open last time, on this device. */
+function savedDeck(): DeckChoice {
+  try {
+    return localStorage.getItem(DECK_KEY) ?? ALL_DECKS;
+  } catch {
+    return ALL_DECKS;
+  }
+}
+
 const START_KEY = "prepup.start.hidden";
 
 /** Whether this person dismissed the first-visit steps on this device. */
@@ -41,6 +53,21 @@ function startHidden(): boolean {
 export function Deck({ api }: { api: Api }) {
   const qc = useQueryClient();
   const topics = useQuery({ queryKey: ["topics"], queryFn: api.listTopics });
+  const decksQuery = useQuery({ queryKey: ["decks"], queryFn: api.listDecks });
+  const decks = decksQuery.data ?? [];
+  const [picked, setPicked] = useState<DeckChoice>(savedDeck);
+  // A deck deleted elsewhere (say, by an assistant) falls back to every deck.
+  const deck: DeckChoice = picked === ALL_DECKS || decks.some((d) => d.id === picked) || !decksQuery.isSuccess ? picked : ALL_DECKS;
+  const pickDeck = (next: DeckChoice) => {
+    setPicked(next);
+    try {
+      localStorage.setItem(DECK_KEY, next);
+    } catch {
+      // Without storage the choice lasts until the page reloads.
+    }
+  };
+  /** Where a new topic goes from the "All decks" view when there are several decks. */
+  const [addTo, setAddTo] = useState("");
   const [tab, setTab] = useState<Tab>("all");
   const [view, setView] = useState<ViewMode>(savedView);
   const show = (next: ViewMode) => {
@@ -58,7 +85,10 @@ export function Deck({ api }: { api: Api }) {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const say = (message: Omit<ToastMessage, "id">) => setToast({ id: Date.now(), ...message });
   const clearToast = useCallback(() => setToast(null), []);
-  const reload = () => void qc.invalidateQueries({ queryKey: ["topics"] });
+  const reload = () => {
+    void qc.invalidateQueries({ queryKey: ["topics"] });
+    void qc.invalidateQueries({ queryKey: ["decks"] });
+  };
 
   /** Undo for a card added a moment ago: it has no history yet, so nothing else is lost. */
   const undoAdd = useMutation({
@@ -75,11 +105,11 @@ export function Deck({ api }: { api: Api }) {
       say(
         created
           ? { text: `Added "${topic.term}"`, action: { label: "Undo", run: () => undoAdd.mutate(topic.id) } }
-          : { text: `"${topic.term}" is already in your deck`, action: { label: "Open", run: () => { setOpenId(topic.id); setToast(null); } } },
+          : { text: `"${topic.term}" is already in "${topic.deck.name}"`, action: { label: "Open", run: () => { setOpenId(topic.id); setToast(null); } } },
       );
       reload();
     },
-    onError: (e: Error, term) => {
+    onError: (e: Error, { term }) => {
       // Give the words back, so a failed add doesn't cost the person their typing.
       setDraft((now) => now || term);
       say({ text: e.message, error: true });
@@ -91,8 +121,10 @@ export function Deck({ api }: { api: Api }) {
     const term = draft.trim();
     if (!term) return input.current?.focus();
     if (add.isPending) return;
+    const deckId = deck !== ALL_DECKS ? deck : decks.length === 1 ? decks[0]!.id : addTo;
+    if (decks.length > 1 && !deckId) return say({ text: "Pick a deck to add it to", error: true });
     setDraft("");
-    add.mutate(term);
+    add.mutate({ term, ...(deckId ? { deckId } : {}) });
   };
   const hide = () => {
     setHideStart(true);
@@ -103,8 +135,12 @@ export function Deck({ api }: { api: Api }) {
     }
   };
 
-  const all = topics.data ?? [];
+  const everything = topics.data ?? [];
+  const all = inDeck(deck, everything);
   const shown = shownIn(tab, all);
+  const deckName = decks.find((d) => d.id === deck)?.name;
+  const showDeckOnCards = deck === ALL_DECKS && decks.length > 1;
+  const chooseDeck = deck === ALL_DECKS && decks.length > 1;
   const summary = summarize(all);
   const counts: Record<Tab, number> = {
     all: summary.total,
@@ -113,12 +149,26 @@ export function Deck({ api }: { api: Api }) {
     confident: summary.confident,
   };
   const linkCount = linkPairs(all).length;
-  const open: TopicView | undefined = all.find((t) => t.id === openId);
-  const steps = topics.isSuccess && !hideStart ? startSteps(all) : null;
+  const open: TopicView | undefined = everything.find((t) => t.id === openId);
+  const steps = topics.isSuccess && !hideStart ? startSteps(everything) : null;
   const empty = topics.isSuccess && all.length === 0;
 
   return (
     <div className="page">
+      {decksQuery.isSuccess && (
+        <DeckBar
+          api={api}
+          decks={decks}
+          topics={everything}
+          selected={deck}
+          onSelect={(next) => {
+            pickDeck(next);
+            setTab("all");
+          }}
+          onMessage={(text, error) => say({ text, error })}
+        />
+      )}
+
       <form className="capture" onSubmit={capture}>
         <label htmlFor="capture" className="sr-only">
           Add a term
@@ -128,11 +178,26 @@ export function Deck({ api }: { api: Api }) {
           ref={input}
           autoComplete="off"
           enterKeyHint="done"
-          placeholder="Add a term you just heard…"
+          placeholder={deckName ? `Add a term to ${deckName}…` : "Add a term you just heard…"}
           value={draft}
           maxLength={80}
           onChange={(e) => setDraft(e.target.value)}
         />
+        {chooseDeck && (
+          <>
+            <label htmlFor="capture-deck" className="sr-only">
+              Deck to add it to
+            </label>
+            <select id="capture-deck" value={addTo} onChange={(e) => setAddTo(e.target.value)}>
+              <option value="">Choose a deck</option>
+              {decks.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <button type="submit" className="btn primary" disabled={add.isPending}>
           {add.isPending ? "Adding…" : "Add"}
         </button>
@@ -141,7 +206,11 @@ export function Deck({ api }: { api: Api }) {
       {steps && <GetStarted steps={steps} onHide={hide} />}
 
       {empty ? (
-        !steps && <p className="empty">Your deck is empty. Add the first term you want to learn above.</p>
+        !steps && (
+          <p className="empty">
+            {deckName ? `"${deckName}" is empty. Add the first term for it above.` : "Your deck is empty. Add the first term you want to learn above."}
+          </p>
+        )
       ) : (
         <>
           <Tracker summary={summary} />
@@ -214,7 +283,7 @@ export function Deck({ api }: { api: Api }) {
         ) : (
           <div className="grid">
             {shown.map((t) => (
-              <TopicCard key={t.id} topic={t} onOpen={() => setOpenId(t.id)} />
+              <TopicCard key={t.id} topic={t} showDeck={showDeckOnCards} onOpen={() => setOpenId(t.id)} />
             ))}
           </div>
         )}
@@ -228,7 +297,9 @@ export function Deck({ api }: { api: Api }) {
           key={open.id}
           api={api}
           topic={open}
-          topics={all}
+          // Links stay inside one deck, so the prerequisite search looks only there.
+          topics={everything.filter((t) => t.deck.id === open.deck.id)}
+          decks={decks}
           onOpenTopic={setOpenId}
           onClose={() => setOpenId(null)}
           onDeleted={(term) => say({ text: `Deleted "${term}"` })}

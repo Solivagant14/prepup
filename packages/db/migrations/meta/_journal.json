@@ -43,6 +43,13 @@
       "when": 1795587056770,
       "tag": "0005_manual_zero_score",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795599156205,
+      "tag": "0006_decks",
+      "breakpoints": true
     }
   ]
 }

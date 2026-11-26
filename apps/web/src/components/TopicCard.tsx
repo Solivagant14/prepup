@@ -1,7 +1,7 @@
 import type { TopicView } from "@prepup/contracts";
 import { cardFlags, cardLook } from "../lib/deck.js";
 
-export function TopicCard({ topic, onOpen }: { topic: TopicView; onOpen: () => void }) {
+export function TopicCard({ topic, onOpen, showDeck = false }: { topic: TopicView; onOpen: () => void; showDeck?: boolean }) {
   const look = cardLook(topic);
   const flags = cardFlags(topic);
   const fade = topic.daysUntilDrop === null ? "not fading" : `fades in ${topic.daysUntilDrop} days`;
@@ -10,9 +10,10 @@ export function TopicCard({ topic, onOpen }: { topic: TopicView; onOpen: () => v
       type="button"
       className="card"
       onClick={onOpen}
-      aria-label={`${topic.term}, ${topic.level}, ${topic.score} of 5, ${topic.importance} importance, ${fade}`}
+      aria-label={`${topic.term}${showDeck ? `, in ${topic.deck.name}` : ""}, ${topic.level}, ${topic.score} of 5, ${topic.importance} importance, ${fade}`}
       style={{ background: look.background, borderColor: look.border, color: look.ink }}
     >
+      {showDeck && <span className="card-deck">{topic.deck.name}</span>}
       <span className="card-term">{topic.term}</span>
       {/* Only what stands out gets a line: the default importance and a card that isn't about to fade say nothing. */}
       {(flags.importance || flags.fade) && (

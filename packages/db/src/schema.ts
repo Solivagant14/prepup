@@ -49,6 +49,26 @@ export const memberships = pgTable(
   (t) => [primaryKey({ columns: [t.workspaceId, t.userId] }), index("memberships_user_idx").on(t.userId)],
 );
 
+/**
+ * A named group of topics, like "DSA". Every topic is in exactly one deck;
+ * deleting a deck deletes its topics. Names are unique per workspace, ignoring
+ * case and punctuation.
+ */
+export const decks = pgTable(
+  "decks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("decks_workspace_name_unique").on(t.workspaceId, t.normalizedName)],
+);
+
 export const topics = pgTable(
   "topics",
   {
@@ -56,14 +76,20 @@ export const topics = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    deckId: uuid("deck_id")
+      .notNull()
+      .references(() => decks.id, { onDelete: "cascade" }),
     term: text("term").notNull(),
     normalizedTerm: text("normalized_term").notNull(),
     sourceUrl: text("source_url"),
     createdBy: uuid("created_by").notNull(),
     createdAt: createdAt(),
   },
-  // Duplicate captures merge: the same normalized term can exist once per workspace.
-  (t) => [uniqueIndex("topics_workspace_term_unique").on(t.workspaceId, t.normalizedTerm)],
+  // Duplicate captures merge: the same normalized term can exist once per deck (and in several decks).
+  (t) => [
+    uniqueIndex("topics_deck_term_unique").on(t.deckId, t.normalizedTerm),
+    index("topics_workspace_term_idx").on(t.workspaceId, t.normalizedTerm),
+  ],
 );
 
 /** Per-person view of a shared topic: importance and your own explanation. */

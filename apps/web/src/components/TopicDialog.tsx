@@ -3,7 +3,7 @@
  * and the test prompt. The title and the main action stay in view while the
  * rest scrolls between them; on a phone it rises from the bottom as a sheet.
  */
-import type { Importance, TopicRef, TopicView } from "@prepup/contracts";
+import type { DeckView, Importance, TopicRef, TopicView } from "@prepup/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type MouseEvent, type SyntheticEvent } from "react";
 import type { Api } from "../lib/api.js";
@@ -21,8 +21,10 @@ import {
 interface Props {
   api: Api;
   topic: TopicView;
-  /** The whole deck: what the prerequisite search looks through. */
+  /** The topics in this card's deck: what the prerequisite search looks through. */
   topics: TopicView[];
+  /** Every deck, for moving the card to another one. */
+  decks: DeckView[];
   /** Opens another card in place of this one (a tapped chip). */
   onOpenTopic: (id: string) => void;
   onClose: () => void;
@@ -36,7 +38,7 @@ interface LinkPair {
   term: string;
 }
 
-export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDeleted }: Props) {
+export function TopicDialog({ api, topic, topics, decks, onOpenTopic, onClose, onDeleted }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const qc = useQueryClient();
   const [explanation, setExplanation] = useState(topic.explanation);
@@ -48,6 +50,8 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
   const [query, setQuery] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  /** A move that would remove links, waiting for the person's yes. */
+  const [moveTo, setMoveTo] = useState<DeckView | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   /** A link just removed, kept so it can be put back. */
   const [removed, setRemoved] = useState<LinkPair | null>(null);
@@ -65,6 +69,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["topics"] });
+    void qc.invalidateQueries({ queryKey: ["decks"] });
     void qc.invalidateQueries({ queryKey: ["history", topic.id] });
   };
   const onError = (e: Error) => setError(e.message);
@@ -203,6 +208,25 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
     </ul>
   );
 
+  const linkCount = topic.buildsOn.length + topic.neededFor.length;
+  const move = useMutation({
+    mutationFn: (deckId: string) => api.moveTopic(topic.id, deckId),
+    onSuccess: ({ topic: moved }) => {
+      setMoveTo(null);
+      qc.setQueryData<TopicView[]>(["topics"], (list) => list?.map((t) => (t.id === moved.id ? moved : t)));
+      refresh();
+    },
+    onError,
+  });
+  const chooseDeck = (deckId: string) => {
+    const to = decks.find((d) => d.id === deckId);
+    if (!to || to.id === topic.deck.id) return;
+    setError(null);
+    // Links stay inside one deck: say so before a move removes them.
+    if (linkCount > 0) setMoveTo(to);
+    else move.mutate(to.id);
+  };
+
   const remove = useMutation({
     mutationFn: () => api.deleteTopic(topic.id),
     onSuccess: ({ deleted }) => {
@@ -301,6 +325,43 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
           )}
           <span className="small">Only a test with your assistant resets the 14-day clock. The countdown starts 3 days before a drop.</span>
         </div>
+
+        {decks.length > 1 && (
+          <div className="field">
+            <label className="field-label" htmlFor="deck-select">
+              Deck
+            </label>
+            <select
+              id="deck-select"
+              className="deck-select"
+              value={topic.deck.id}
+              disabled={move.isPending}
+              onChange={(e) => chooseDeck(e.target.value)}
+            >
+              {decks.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            {moveTo && (
+              <div className="foot-ask" role="group" aria-label="Confirm move">
+                <span className="small">
+                  Moving "{topic.term}" to "{moveTo.name}" removes its {linkCount} {linkCount === 1 ? "link" : "links"}, because links stay
+                  inside one deck. Its score and history move with it.
+                </span>
+                <div className="row-end">
+                  <button type="button" className="btn" onClick={() => setMoveTo(null)} disabled={move.isPending}>
+                    Cancel
+                  </button>
+                  <button type="button" className="btn primary" onClick={() => move.mutate(moveTo.id)} disabled={move.isPending}>
+                    {move.isPending ? "Moving…" : "Move"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="field">
           <span className="field-label" id="imp-label">
@@ -442,7 +503,7 @@ export function TopicDialog({ api, topic, topics, onOpenTopic, onClose, onDelete
                 </ul>
               ) : (
                 <span className="small">
-                  {topics.length <= 1 ? "Add another topic to your deck first." : "No other topic matches."}
+                  {topics.length <= 1 ? "Add another topic to this deck first." : "No other topic matches."}
                 </span>
               )}
               {found!.more > 0 && <span className="small">{found!.more} more · keep typing to narrow it down</span>}

@@ -28,7 +28,7 @@ export const FIXED_RULES: FixedRule[] = [
   {
     id: "pick",
     title: "Your assistant picks the topics, unless you name them",
-    rule: 'Pick topics with list_topics (filter "fading_week" or "prep") unless the user names topics.',
+    rule: 'Pick topics with list_topics (filter "fading_week" or "prep"; pass deck when the user names one, as in "test me on DSA") unless the user names topics.',
     why: "Tests go where they help most: what's weak or about to fade.",
   },
   {
@@ -134,6 +134,8 @@ export function buildInstructions(style: string): string {
     "",
     "Capturing: when the user mentions a term they want to learn, call add_topic. It is safe to call twice; duplicates merge.",
     'Topics can build on other topics ("RAG builds on Embeddings"). Links map the deck; they never change a score or the fade clock.',
+    "",
+    'Decks: topics are grouped in decks the user names, like "DSA" or "System Design". list_decks shows them. When the user has more than one deck, add_topic needs the deck: ask which one if they haven\'t said. The same term can be in two decks as separate topics; if a tool says a term is in several decks, ask which deck and pass it. Links stay inside one deck. Create, rename or delete a deck, or move a topic, only after the user says yes in chat.',
     "",
     "Testing has two layers: fixed rules that always apply, and the user's own testing style.",
     "Before the first test in a conversation, call whoami: it returns their current testing style, which may have changed since this conversation began.",

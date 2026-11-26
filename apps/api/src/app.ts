@@ -163,7 +163,13 @@ export function createApp(opts: AppOptions) {
 
   const svc = opts.service;
   app.get("/api/topics", async (c) =>
-    c.json(await svc.listTopics(c.var.actor, { filter: c.req.query("filter") ?? "all", limit: Number(c.req.query("limit") ?? 500) })),
+    c.json(
+      await svc.listTopics(c.var.actor, {
+        filter: c.req.query("filter") ?? "all",
+        limit: Number(c.req.query("limit") ?? 500),
+        ...(c.req.query("deckId") ? { deckId: c.req.query("deckId") } : {}),
+      }),
+    ),
   );
   app.post("/api/topics", async (c) => {
     const { topic, created } = await svc.addTopic(c.var.actor, await body(c));
@@ -174,6 +180,16 @@ export function createApp(opts: AppOptions) {
   app.put("/api/topics/:id/score", async (c) => c.json(await svc.setScore(c.var.actor, uuidParam(c), await body(c), "web")));
   app.delete("/api/topics/:id", async (c) => c.json({ deleted: await svc.deleteTopic(c.var.actor, uuidParam(c)) }));
   app.get("/api/topics/:id/history", async (c) => c.json(await svc.history(c.var.actor, uuidParam(c))));
+  app.put("/api/topics/:id/deck", async (c) => c.json(await svc.moveTopic(c.var.actor, uuidParam(c), await body(c))));
+
+  // Decks: named groups of topics. Deleting a deck deletes its topics.
+  app.get("/api/decks", async (c) => c.json(await svc.listDecks(c.var.actor)));
+  app.post("/api/decks", async (c) => {
+    const { deck, created } = await svc.createDeck(c.var.actor, await body(c));
+    return c.json(deck, created ? 201 : 200);
+  });
+  app.patch("/api/decks/:id", async (c) => c.json(await svc.renameDeck(c.var.actor, uuidParam(c), await body(c))));
+  app.delete("/api/decks/:id", async (c) => c.json({ deleted: await svc.deleteDeck(c.var.actor, uuidParam(c)) }));
 
   // "Builds on" links. Both answer with the topic as it now stands.
   app.post("/api/topics/:id/links", async (c) => {

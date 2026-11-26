@@ -16,6 +16,7 @@ import {
 const topic = (id: string, buildsOn: string[] = []): TopicView => ({
   id,
   term: id,
+  deck: { id: "d1", name: "My deck" },
   sourceUrl: null,
   importance: "medium",
   explanation: "",
