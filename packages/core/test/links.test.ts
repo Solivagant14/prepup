@@ -403,7 +403,7 @@ describe("fixed rules for links", () => {
     for (const r of FIXED_RULES) if (r.promise) expect(text0).not.toContain(r.promise);
 
     const text = buildInstructions("Short and strict.");
-    expect(text).toContain(`9. ${byId.link!.rule}`);
+    expect(text).toContain(`10. ${byId.link!.rule}`);
     for (const r of FIXED_RULES) expect(text).not.toContain(r.title);
     expect(text).toContain("never change a score or the fade clock");
     expect(text).not.toMatch(/Forward Deployed|FDE|buzzword|interview/i);
