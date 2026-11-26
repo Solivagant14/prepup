@@ -423,8 +423,8 @@ function Scores() {
 
       <h2>Changing a score yourself</h2>
       <p>
-        Open a card and tap a number. It is saved as a manual edit and labelled that way in the card's history. The
-        clock keeps running: a manual edit is your estimate, not a test.
+        Open a card and tap a number. It is saved as a manual edit, for the topic's current level. The clock keeps
+        running: a manual edit is your estimate, not a test.
       </p>
 
       <h2>Importance and the filters</h2>

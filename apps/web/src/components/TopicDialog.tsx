@@ -1,5 +1,5 @@
 /**
- * The card pop-up: importance, score, explanation, links, freshness, history
+ * The card pop-up: importance, score, explanation, links and freshness
  * and the test prompt. The title and the main action stay in view while the
  * rest scrolls between them; on a phone it rises from the bottom as a sheet.
  */
@@ -12,13 +12,12 @@ import {
   type TopicView,
   type Understanding,
 } from "@prepup/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type MouseEvent, type SyntheticEvent } from "react";
 import type { Api } from "../lib/api.js";
 import {
   cardLook,
   daysAgo,
-  eventLabel,
   explanationNote,
   freshnessText,
   IMPORTANCES,
@@ -73,12 +72,10 @@ export function TopicDialog({ api, topic, topics, decks, onOpenTopic, onClose, o
     if (d && !d.open) d.showModal();
   }, []);
 
-  const history = useQuery({ queryKey: ["history", topic.id], queryFn: () => api.history(topic.id) });
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["topics"] });
     void qc.invalidateQueries({ queryKey: ["decks"] });
-    void qc.invalidateQueries({ queryKey: ["history", topic.id] });
   };
   const onError = (e: Error) => setError(e.message);
 
@@ -567,23 +564,6 @@ export function TopicDialog({ api, topic, topics, decks, onOpenTopic, onClose, o
           </div>
         )}
 
-        {(history.data?.length ?? 0) > 0 && (
-          <div className="field">
-            <span className="field-label">History</span>
-            <ul className="history">
-              {history.data!.slice(0, 5).map((e) => (
-                <li key={e.id}>
-                  <time dateTime={e.createdAt}>{daysAgo(e.createdAt)}</time>
-                  <span>
-                    {eventLabel(e)}
-                    {e.score !== null && ` · ${e.understanding ? `${UNDERSTANDING_NAMES[e.understanding]} ` : ""}${e.score}/5`}
-                    {e.feedback && <span className="muted"> · {e.feedback}</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
 
       </div>
 
