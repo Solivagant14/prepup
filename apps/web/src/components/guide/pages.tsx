@@ -397,6 +397,18 @@ function Scores() {
         you can explain it clearly in your own words, and a test can't record a 5 without that.
       </p>
 
+      <h2>Understanding levels</h2>
+      <p>
+        Each topic is at one of three levels: <strong>Beginner</strong>, <strong>Intermediate</strong> or{" "}
+        <strong>Advanced</strong>. A new topic starts at Beginner, and every level has its own score from 0 to 5.
+      </p>
+      <ul>
+        <li>Your assistant asks at the topic's level: basics at Beginner, how and when to use it at Intermediate, edge cases and design at Advanced.</li>
+        <li>A 5 from a test moves the topic up a level automatically, where it starts at 0.</li>
+        <li>You can change the level yourself on the card, up or down. The other levels keep their scores.</li>
+        <li>Fading, Prep now and Confident all use the score at the topic's current level.</li>
+      </ul>
+
       <h2>Why a score drops</h2>
       <p>
         What you don't revisit, you forget. A score drops one step for every <strong>{FADE_DAYS} days</strong> without a
@@ -411,8 +423,8 @@ function Scores() {
 
       <h2>Changing a score yourself</h2>
       <p>
-        Open a card and tap a number. It is saved as a manual edit and labelled that way in the card's history. The
-        clock keeps running: a manual edit is your estimate, not a test.
+        Open a card and tap a number. It is saved as a manual edit, for the topic's current level. The clock keeps
+        running: a manual edit is your estimate, not a test.
       </p>
 
       <h2>Importance and the filters</h2>

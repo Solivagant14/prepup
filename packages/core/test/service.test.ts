@@ -70,7 +70,9 @@ describe("PrepUpService", () => {
       code: "rule",
     });
     const ok = await service.recordReview(me, { term: "Embeddings", score: 5, explained: true, feedback: "Clear" });
-    expect(ok.level).toBe("Can explain");
+    // The 5 is kept at Beginner, and the topic moves up to Intermediate.
+    expect(ok.levels[0]).toEqual({ understanding: "beginner", score: 5 });
+    expect(ok.understanding).toBe("intermediate");
   });
 
   it("does not reset the fade clock on a manual edit, and labels it in history", async () => {
@@ -489,5 +491,67 @@ describe("automatic linking", () => {
 
     const other = (await service.createDeck(me, { name: "DSA" })).deck;
     expect((await service.moveTopic(me, arrays.id, { deckId: other.id })).topic.needsLinks).toBe(true);
+  });
+});
+
+describe("understanding levels", () => {
+  it("starts every topic at beginner, with a 0/5 at each level", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    expect(topic).toMatchObject({ understanding: "beginner", score: 0 });
+    expect(topic.levels).toEqual([
+      { understanding: "beginner", score: 0 },
+      { understanding: "intermediate", score: 0 },
+      { understanding: "advanced", score: 0 },
+    ]);
+  });
+
+  it("moves up one level after a 5 from a test, and stops at advanced", async () => {
+    const { service } = setup();
+    const me = await service.resolveActor("user-1");
+    await service.addTopic(me, { term: "RAG" });
+    expect(await service.recordReview(me, { term: "RAG", score: 4, feedback: "Nearly" })).toMatchObject({
+      understanding: "beginner",
+      score: 4,
+    });
+    const up = await service.recordReview(me, { term: "RAG", score: 5, explained: true, feedback: "Clear", explanation: "Mine" });
+    expect(up).toMatchObject({ understanding: "intermediate", score: 0, explanation: "Mine" });
+    expect(up.levels.map((l) => l.score)).toEqual([5, 0, 0]);
+    await service.recordReview(me, { term: "RAG", score: 5, explained: true, feedback: "Clear" });
+    const top = await service.recordReview(me, { term: "RAG", score: 5, explained: true, feedback: "Clear" });
+    expect(top).toMatchObject({ understanding: "advanced", score: 5 });
+    expect(top.levels.map((l) => l.score)).toEqual([5, 5, 5]);
+  });
+
+  it("never moves a level on a manual 5, and lets the person change the level either way", async () => {
+    const { service, advance } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    expect(await service.setScore(me, topic.id, { score: 5 }, "web")).toMatchObject({ understanding: "beginner", score: 5 });
+    const adv = await service.updateTopic(me, topic.id, { understanding: "advanced" }, "web");
+    expect(adv).toMatchObject({ understanding: "advanced", score: 0, level: "Not tested yet" });
+    advance(1);
+    await service.setScore(me, topic.id, { score: 2 }, "web");
+    const back = await service.updateTopic(me, topic.id, { understanding: "beginner" }, "web");
+    expect(back.levels.map((l) => l.score)).toEqual([5, 0, 2]);
+    // Changing the level is a setting, not history.
+    expect((await service.history(me, topic.id)).map((e) => [e.kind, e.understanding])).toEqual([
+      ["manual_edit", "advanced"],
+      ["manual_edit", "beginner"],
+    ]);
+  });
+
+  it("fades each level on its own clock", async () => {
+    const { service, advance } = setup();
+    const me = await service.resolveActor("user-1");
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    await service.recordReview(me, { term: "RAG", score: 5, explained: true, feedback: "Clear" });
+    advance(7);
+    await service.recordReview(me, { term: "RAG", score: 3, feedback: "OK" });
+    advance(8); // 15 days after the beginner test, 8 after the intermediate one
+    const now = await service.getTopic(me, topic.id);
+    expect(now).toMatchObject({ understanding: "intermediate", score: 3 });
+    expect(now.levels.map((l) => l.score)).toEqual([4, 3, 0]);
   });
 });

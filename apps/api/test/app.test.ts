@@ -298,7 +298,7 @@ describe("MCP", () => {
     const prompts = (await mcp(USER, "prompts/list")).result.prompts as Array<{ name: string }>;
     expect(page.prompts.map((p) => p.name).sort()).toEqual(prompts.map((p) => p.name).sort());
     expect(page.fixedRules.map((r) => r.id)).toEqual(FIXED_RULES.map((r) => r.id));
-    expect(page.fixedRules).toHaveLength(9);
+    expect(page.fixedRules).toHaveLength(10);
     // The page gets each rule twice: in everyday words, and exactly as the assistant is told it.
     expect(page.fixedRules.map((r) => [r.title, r.rule])).toEqual(FIXED_RULES.map((r) => [r.title, r.rule]));
     expect(page.presets.map((p) => p.id)).toEqual(["interviewer", "tutor", "drill"]);
@@ -324,7 +324,7 @@ describe("MCP", () => {
     const live = (await mcp(USER, "tools/list")).result.tools as Array<{ name: string; description: string }>;
     expect(info.tools.map((t) => [t.name, t.description]).sort()).toEqual(live.map((t) => [t.name, t.description]).sort());
     expect(info.fixedRules.map((r) => r.rule)).toEqual(FIXED_RULES.map((r) => r.rule));
-    expect(info.fixedRules.filter((r) => r.promise).map((r) => r.id)).toEqual(["no-peeking", "score", "record", "link"]);
+    expect(info.fixedRules.filter((r) => r.promise).map((r) => r.id)).toEqual(["no-peeking", "level", "score", "record", "link"]);
   });
 
   it("rejects a bad testing style with a readable message", async () => {
@@ -652,7 +652,7 @@ describe("topic links over MCP", () => {
       capabilities: {},
       clientInfo: { name: "test", version: "1" },
     });
-    expect(init.result.serverInfo.version).toBe("0.7.0");
+    expect(init.result.serverInfo.version).toBe("0.8.0");
     expect(init.result.instructions).toMatch(/call link_topics only after they say yes/);
     expect(init.result.instructions).toMatch(/builds on is weaker, test that prerequisite first/);
   });
@@ -963,5 +963,42 @@ describe("automatic linking", () => {
     await setAutoLink(USER, true);
     const auto = await mcp(USER, "prompts/get", { name: "build_graph", arguments: {} });
     expect(auto.result.messages[0].content.text).toMatch(/each of my PrepUp decks.*without asking.*mark_topics_linked.*study plan/s);
+  });
+});
+
+describe("understanding levels", () => {
+  const call = async (user: string, name: string, args: Record<string, unknown>) => {
+    const res = await mcp(user, "tools/call", { name, arguments: args });
+    return { text: (res.result?.content?.[0]?.text ?? "") as string, isError: Boolean(res.result?.isError ?? res.error) };
+  };
+  const data = (text: string) => JSON.parse(text.slice(text.indexOf("\n\n") + 2));
+
+  it("starts at Beginner, scores each level apart, and moves up after a 5", async () => {
+    const added = data((await call(USER, "add_topic", { term: "RAG" })).text);
+    expect(added).toMatchObject({ understanding: "Beginner", score: 0, scoresByLevel: { Beginner: 0, Intermediate: 0, Advanced: 0 } });
+    expect((await call(USER, "get_topic", { term: "RAG" })).text).toContain("Ask at the Beginner level");
+
+    const three = await call(USER, "record_review", { term: "RAG", score: 3, feedback: "Good" });
+    expect(three.text).toMatch(/now 3\/5 at Beginner/);
+    const five = await call(USER, "record_review", { term: "RAG", score: 5, explained: true, feedback: "Clear" });
+    expect(five.text).toMatch(/moved up to Intermediate, where it starts at 0\/5/);
+    expect(data(five.text)).toMatchObject({ understanding: "Intermediate", score: 0, scoresByLevel: { Beginner: 5, Intermediate: 0 } });
+
+    // The person moves it back on the card; the Beginner score is still there.
+    const id = ((await (await app.request("/api/topics", as(USER))).json()) as Array<{ id: string }>)[0]!.id;
+    const back = await app.request(`/api/topics/${id}`, as(USER, { method: "PATCH", body: JSON.stringify({ understanding: "beginner" }) }));
+    expect(await back.json()).toMatchObject({ understanding: "beginner", score: 5 });
+    const bad = await app.request(`/api/topics/${id}`, as(USER, { method: "PATCH", body: JSON.stringify({ understanding: "expert" }) }));
+    expect(bad.status).toBe(400);
+  });
+
+  it("tells the assistant to ask at the topic's level", async () => {
+    const init = await mcp(USER, "initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "test", version: "1" },
+    });
+    expect(init.result.instructions).toMatch(/Ask at the topic's understanding level/);
+    expect(init.result.instructions).toMatch(/a confirmed 5 moves it up one level automatically/);
   });
 });

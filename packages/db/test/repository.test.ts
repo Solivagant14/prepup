@@ -103,8 +103,33 @@ describe("PostgresRepository", () => {
         userId: me.userId,
         kind: "claude_test",
         score: 5,
+        understanding: "beginner",
         explained: false,
         source: "mcp",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("keeps a score per understanding level and refuses a score without its level", async () => {
+    const me = await service.resolveActor(randomUUID());
+    const { topic } = await service.addTopic(me, { term: "RAG" });
+    await service.recordReview(me, { term: "RAG", score: 5, explained: true, feedback: "Clear" });
+    const moved = await service.getTopic(me, topic.id);
+    expect(moved).toMatchObject({ understanding: "intermediate", score: 0 });
+    expect(moved.levels.map((l) => l.score)).toEqual([5, 0, 0]);
+    advance(1);
+    await service.recordReview(me, { term: "RAG", score: 2, feedback: "Partial" });
+    await service.updateTopic(me, topic.id, { understanding: "beginner" }, "web");
+    expect(await service.getTopic(me, topic.id)).toMatchObject({ understanding: "beginner", score: 5 });
+    expect((await service.history(me, topic.id)).map((e) => e.understanding)).toEqual(["intermediate", "beginner"]);
+    await expect(
+      db.insert(schema.reviewEvents).values({
+        workspaceId: me.workspaceId,
+        topicId: topic.id,
+        userId: me.userId,
+        kind: "manual_edit",
+        score: 3,
+        source: "web",
       }),
     ).rejects.toThrow();
   });
@@ -113,6 +138,7 @@ describe("PostgresRepository", () => {
     const me = await service.resolveActor(randomUUID());
     const { topic } = await service.addTopic(me, { term: "RAG" });
     await service.recordReview(me, { term: "RAG", score: 3, feedback: "Good" });
+    advance(1); // Postgres orders events by time; two in the same instant could come back either way.
     expect(await service.setScore(me, topic.id, { score: 0 }, "web")).toMatchObject({ score: 0, level: "Not tested yet" });
     await expect(
       db.insert(schema.reviewEvents).values({
@@ -121,6 +147,7 @@ describe("PostgresRepository", () => {
         userId: me.userId,
         kind: "claude_test",
         score: 0,
+        understanding: "beginner",
         explained: false,
         source: "mcp",
       }),
@@ -199,6 +226,7 @@ describe("PostgresRepository", () => {
             userId: me.userId,
             kind: "claude_test",
             score: 5,
+            understanding: "beginner",
             explained: false, // violates the database's "a 5 must be earned" check
             feedback: null,
             text: null,
@@ -491,6 +519,8 @@ describe("the decks migration", () => {
     expect((await raw(`select count(*)::int as n from decks where workspace_id = '${wb}'`)).rows[0]!.n).toBe(0);
     // The automatic-linking migration counts a topic that already builds on something as checked.
     expect(ragView.needsLinks).toBe(false);
+    // The understanding-levels migration counts every earlier score as a Beginner score.
+    expect(ragView).toMatchObject({ understanding: "beginner", levels: [{ understanding: "beginner", score: 3 }, {}, {}] });
     expect((await migrated.findByTerm(a, "Embeddings")).needsLinks).toBe(true);
     // A new topic with the same deck name lands in the migrated deck, not a second "My deck".
     expect((await migrated.addTopic(a, { term: "Agents" })).topic.deck.id).toBe(ragView.deck.id);
