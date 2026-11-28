@@ -1,4 +1,4 @@
-import { UNDERSTANDING_NAMES, type TopicView } from "@prepup/contracts";
+import type { TopicView } from "@prepup/contracts";
 import { cardFlags, cardLook } from "../lib/deck.js";
 
 export function TopicCard({ topic, onOpen, showDeck = false }: { topic: TopicView; onOpen: () => void; showDeck?: boolean }) {
@@ -10,7 +10,7 @@ export function TopicCard({ topic, onOpen, showDeck = false }: { topic: TopicVie
       type="button"
       className="card"
       onClick={onOpen}
-      aria-label={`${topic.term}${showDeck ? `, in ${topic.deck.name}` : ""}, ${UNDERSTANDING_NAMES[topic.understanding]}, ${topic.level}, ${topic.score} of 5, ${topic.importance} importance, ${fade}`}
+      aria-label={`${topic.term}${showDeck ? `, in ${topic.deck.name}` : ""}, ${topic.level}, ${topic.score} of 5, ${topic.importance} importance, ${fade}`}
       style={{ background: look.background, borderColor: look.border, color: look.ink }}
     >
       {showDeck && <span className="card-deck">{topic.deck.name}</span>}
@@ -23,9 +23,7 @@ export function TopicCard({ topic, onOpen, showDeck = false }: { topic: TopicVie
         </span>
       )}
       <span className="card-bottom">
-        <span>
-          {UNDERSTANDING_NAMES[topic.understanding]} · {topic.level}
-        </span>
+        <span>{topic.level}</span>
         <span className="mono">{topic.score}/5</span>
       </span>
       {look.countdown !== null && (

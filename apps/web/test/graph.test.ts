@@ -33,12 +33,6 @@ const topic = (id: string, buildsOn: string[] = []): TopicView => ({
   buildsOn: buildsOn.map((b) => ({ id: b, term: b })),
   neededFor: [],
   needsLinks: false,
-  understanding: "beginner",
-  levels: [
-    { understanding: "beginner", score: 1 },
-    { understanding: "intermediate", score: 0 },
-    { understanding: "advanced", score: 0 },
-  ],
 });
 
 const at = (layout: ReturnType<typeof layoutGraph>, id: string) => layout.nodes.find((n) => n.topic.id === id)!;

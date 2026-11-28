@@ -3,7 +3,7 @@
  * scoped by workspace_id (and user_id where data is personal), so one user
  * can never read or change another workspace's rows through this class.
  */
-import { UNDERSTANDING_LEVELS, type Importance, type Score, type ShownScore, type Understanding } from "@prepup/contracts";
+import type { Importance, Score } from "@prepup/contracts";
 import type {
   ChangeSet,
   DeckRecord,
@@ -358,9 +358,9 @@ export class PostgresRepository implements PrepUpRepository {
   }
 
   /**
-   * Topics plus the facts each view is computed from: per understanding level,
-   * the latest scored event and the latest Claude test; and the latest
-   * explanation change. DISTINCT ON keeps one row per topic (and level).
+   * Topics plus the facts each view is computed from: the latest scored event,
+   * the latest Claude test and the latest explanation change. DISTINCT ON
+   * keeps one row per topic.
    */
   private async states(workspaceId: string, userId: string, topicId?: string): Promise<TopicState[]> {
     const topicFilter = topicId
@@ -376,34 +376,24 @@ export class PostgresRepository implements PrepUpRepository {
 
     const [rows, scored, tested, explained] = await Promise.all([
       this.db
-        .select({
-          topic: topics,
-          importance: topicSettings.importance,
-          explanation: topicSettings.explanation,
-          understanding: topicSettings.understanding,
-        })
+        .select({ topic: topics, importance: topicSettings.importance, explanation: topicSettings.explanation })
         .from(topics)
         .leftJoin(topicSettings, and(eq(topicSettings.topicId, topics.id), eq(topicSettings.userId, userId)))
         .where(topicFilter),
       this.db
-        .selectDistinctOn([reviewEvents.topicId, reviewEvents.understanding], {
+        .selectDistinctOn([reviewEvents.topicId], {
           topicId: reviewEvents.topicId,
-          understanding: reviewEvents.understanding,
           score: reviewEvents.score,
           at: reviewEvents.createdAt,
         })
         .from(reviewEvents)
         .where(eventScope(isNotNull(reviewEvents.score) as ReturnType<typeof eq>))
-        .orderBy(reviewEvents.topicId, reviewEvents.understanding, desc(reviewEvents.createdAt)),
+        .orderBy(reviewEvents.topicId, desc(reviewEvents.createdAt)),
       this.db
-        .selectDistinctOn([reviewEvents.topicId, reviewEvents.understanding], {
-          topicId: reviewEvents.topicId,
-          understanding: reviewEvents.understanding,
-          at: reviewEvents.createdAt,
-        })
+        .selectDistinctOn([reviewEvents.topicId], { topicId: reviewEvents.topicId, at: reviewEvents.createdAt })
         .from(reviewEvents)
         .where(eventScope(eq(reviewEvents.kind, "claude_test")))
-        .orderBy(reviewEvents.topicId, reviewEvents.understanding, desc(reviewEvents.createdAt)),
+        .orderBy(reviewEvents.topicId, desc(reviewEvents.createdAt)),
       this.db
         .selectDistinctOn([reviewEvents.topicId], {
           topicId: reviewEvents.topicId,
@@ -415,23 +405,15 @@ export class PostgresRepository implements PrepUpRepository {
         .orderBy(reviewEvents.topicId, desc(reviewEvents.createdAt)),
     ]);
 
-    const key = (topicId: string, level: string | null) => `${topicId}:${level}`;
-    const lastScore = new Map(scored.map((s) => [key(s.topicId, s.understanding), { score: s.score as ShownScore, at: s.at }]));
-    const lastTest = new Map(tested.map((t) => [key(t.topicId, t.understanding), t.at]));
+    const lastScore = new Map(scored.map((s) => [s.topicId, { score: s.score as Score, at: s.at }]));
+    const lastTest = new Map(tested.map((t) => [t.topicId, t.at]));
     const lastExplanation = new Map(explained.map((e) => [e.topicId, { at: e.at, source: e.source as EventSource }]));
-    const levels = (topicId: string) =>
-      Object.fromEntries(
-        UNDERSTANDING_LEVELS.map((l) => [
-          l,
-          { lastScore: lastScore.get(key(topicId, l)) ?? null, lastTestAt: lastTest.get(key(topicId, l)) ?? null },
-        ]),
-      ) as TopicState["levels"];
     return rows.map((r) => ({
       topic: r.topic,
       importance: (r.importance ?? "medium") as Importance,
       explanation: r.explanation ?? "",
-      understanding: (r.understanding ?? "beginner") as Understanding,
-      levels: levels(r.topic.id),
+      lastScore: lastScore.get(r.topic.id) ?? null,
+      lastTestAt: lastTest.get(r.topic.id) ?? null,
       lastExplanation: lastExplanation.get(r.topic.id) ?? null,
     }));
   }

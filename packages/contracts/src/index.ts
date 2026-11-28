@@ -15,23 +15,6 @@ export type Score = z.infer<typeof Score>;
 export const LEVEL_NAMES = ["Shaky", "Learning", "Getting there", "Confident", "Can explain"] as const;
 
 /**
- * How deep a topic is tested. Every topic starts at beginner; a 5 from a test
- * moves it up one level, and the person can change it on the card. Each
- * level keeps its own 0–5 score.
- */
-export const UNDERSTANDING_LEVELS = ["beginner", "intermediate", "advanced"] as const;
-export const Understanding = z.enum(UNDERSTANDING_LEVELS);
-export type Understanding = z.infer<typeof Understanding>;
-export const UNDERSTANDING_NAMES: Record<Understanding, string> = {
-  beginner: "Beginner",
-  intermediate: "Intermediate",
-  advanced: "Advanced",
-};
-/** The level a 5 moves a topic up to; null at the top. */
-export const nextUnderstanding = (u: Understanding): Understanding | null =>
-  UNDERSTANDING_LEVELS[UNDERSTANDING_LEVELS.indexOf(u) + 1] ?? null;
-
-/**
  * A topic that has never been tested or scored shows 0, and you can set a
  * topic back to 0 yourself. A test always records 1–5, and a score never
  * fades below 1 (a 0 doesn't fade).
@@ -187,10 +170,8 @@ export const UpdateTopicInput = z
   .object({
     importance: Importance.optional(),
     explanation: z.string().max(4000).optional(),
-    /** Move the topic to another understanding level. Each level keeps its own score. */
-    understanding: Understanding.optional(),
   })
-  .refine((v) => v.importance !== undefined || v.explanation !== undefined || v.understanding !== undefined, {
+  .refine((v) => v.importance !== undefined || v.explanation !== undefined, {
     message: "Nothing to update",
   });
 export type UpdateTopicInput = z.infer<typeof UpdateTopicInput>;
@@ -324,13 +305,9 @@ export interface TopicView {
   /** Who last wrote the explanation: you in the web app, or Claude after a test. */
   explanationBy: "you" | "claude" | null;
   explanationUpdatedAt: string | null;
-  /** The level the topic is tested at now. Score, level name and fading are all for this level. */
-  understanding: Understanding;
-  /** 0 when never scored at this level or set to 0 by you, otherwise 1–5. */
+  /** 0 when never scored or set to 0 by you, otherwise 1–5. */
   score: ShownScore;
   level: LevelName;
-  /** The score at every level, beginner first, so a card can show what each level stands at. */
-  levels: { understanding: Understanding; score: ShownScore }[];
   createdAt: string;
   lastTestedAt: string | null;
   /** Days until the score drops one step; null when it cannot drop (score 0 or 1). */
@@ -350,8 +327,6 @@ export interface ReviewEventView {
   id: string;
   kind: EventKind;
   score: number | null;
-  /** The understanding level a score is for; null for an explanation change. */
-  understanding: Understanding | null;
   explained: boolean;
   /** Claude's one-line reason for a test score. */
   feedback: string | null;
