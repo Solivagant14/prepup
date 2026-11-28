@@ -19,7 +19,6 @@ import {
   RenameDeckByNameInput,
   SearchTopicsInput,
   TOPIC_FILTERS,
-  UNDERSTANDING_NAMES,
   type TopicView,
 } from "@prepup/contracts";
 import {
@@ -65,7 +64,7 @@ export const TOOLS = {
   record_review: {
     title: "Record a test result",
     description:
-      "Save the result of testing the user on a topic: the score for the topic's current understanding level, and optionally the explanation you drafted for their card. Only call after the user has confirmed both. Resets that level's 14-day fade clock. A score of 5 requires explained: true, and moves the topic up to the next level automatically (Beginner to Intermediate to Advanced), where it starts at 0.",
+      "Save the result of testing the user on a topic: the score, and optionally the explanation you drafted for their card. Only call after the user has confirmed both. Resets the topic's 14-day fade clock. A score of 5 requires explained: true.",
     readOnly: false,
   },
   search_topics: {
@@ -162,9 +161,7 @@ const toolError = (message: string) => ({
 const brief = (t: TopicView) => ({
   term: t.term,
   deck: t.deck.name,
-  understanding: UNDERSTANDING_NAMES[t.understanding],
   score: t.score,
-  scoresByLevel: Object.fromEntries(t.levels.map((l) => [UNDERSTANDING_NAMES[l.understanding], l.score])),
   level: t.level,
   importance: t.importance,
   daysUntilDrop: t.daysUntilDrop,
@@ -208,7 +205,7 @@ export async function testingStyleFor(service: PrepUpService, actor: Actor): Pro
  */
 export function createMcpServer(service: PrepUpService, actor: Actor, style: string = DEFAULT_TESTING_STYLE): McpServer {
   const server = new McpServer(
-    { name: "prepup", title: "PrepUp", version: "0.8.0" },
+    { name: "prepup", title: "PrepUp", version: "0.7.0" },
     { instructions: buildInstructions(style), capabilities: { tools: {}, prompts: {} } },
   );
 
@@ -293,15 +290,8 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
         const lastTests = history
           .filter((e) => e.kind === "claude_test")
           .slice(0, 3)
-          .map((e) => ({
-            at: e.createdAt,
-            level: e.understanding ? UNDERSTANDING_NAMES[e.understanding] : null,
-            score: e.score,
-            feedback: e.feedback,
-          }));
-        return toolResult(
-          `"${topic.term}" (deck "${topic.deck.name}"): ${UNDERSTANDING_NAMES[topic.understanding]}, ${topic.score}/5 (${topic.level}). Ask at the ${UNDERSTANDING_NAMES[topic.understanding]} level.`,
-          {
+          .map((e) => ({ at: e.createdAt, score: e.score, feedback: e.feedback }));
+        return toolResult(`"${topic.term}" (deck "${topic.deck.name}"): ${topic.score}/5 (${topic.level}).`, {
           ...brief(topic),
           explanation: topic.explanation || null,
           explanationWrittenBy: topic.explanationBy ? WHO[topic.explanationBy] : null,
@@ -479,15 +469,9 @@ export function createMcpServer(service: PrepUpService, actor: Actor, style: str
     },
     async (input) =>
       guard(async () => {
-        const before = await service.findByTerm(actor, input.term, input.deck);
         const topic = await service.recordReview(actor, input);
         const note = input.explanation ? " Their explanation was updated." : "";
-        const was = UNDERSTANDING_NAMES[before.understanding];
-        const saved =
-          topic.understanding !== before.understanding
-            ? `Saved: "${topic.term}" scored 5/5 at ${was}, so it moved up to ${UNDERSTANDING_NAMES[topic.understanding]}, where it starts at 0/5. Tell the user.`
-            : `Saved: "${topic.term}" is now ${topic.score}/5 at ${was} (${topic.level}).`;
-        return toolResult(saved + note, brief(topic));
+        return toolResult(`Saved: "${topic.term}" is now ${topic.score}/5 (${topic.level}).${note}`, brief(topic));
       }),
   );
 

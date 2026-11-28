@@ -57,13 +57,6 @@
       "when": 1795602887792,
       "tag": "0007_auto_link",
       "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1795693371541,
-      "tag": "0008_understanding_levels",
-      "breakpoints": true
     }
   ]
 }

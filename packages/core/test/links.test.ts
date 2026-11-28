@@ -383,7 +383,7 @@ describe("similar topics and search", () => {
 describe("fixed rules for links", () => {
   it("tells Claude to ask before linking and to test weaker prerequisites first", () => {
     const ids = FIXED_RULES.map((r) => r.id);
-    expect(ids).toEqual(["pick", "prerequisites-first", "one-at-a-time", "no-peeking", "level", "score", "draft", "confirm", "record", "link"]);
+    expect(ids).toEqual(["pick", "prerequisites-first", "one-at-a-time", "no-peeking", "score", "draft", "confirm", "record", "link"]);
     expect(new Set(ids).size).toBe(ids.length);
     const byId = Object.fromEntries(FIXED_RULES.map((r) => [r.id, r]));
     const text0 = buildInstructions("Short and strict.");
@@ -398,12 +398,12 @@ describe("fixed rules for links", () => {
     expect(new Set(FIXED_RULES.map((r) => r.title)).size).toBe(FIXED_RULES.length);
     // What people read names no one AI app: PrepUp works with any that speaks MCP.
     for (const r of FIXED_RULES) expect(`${r.title} ${r.why} ${r.promise ?? ""}`).not.toMatch(/Claude|ChatGPT/);
-    // Five rules are promises to the user; the guide leads with them.
-    expect(FIXED_RULES.filter((r) => r.promise).map((r) => r.id)).toEqual(["no-peeking", "level", "score", "record", "link"]);
+    // Four rules are promises to the user; the guide leads with them.
+    expect(FIXED_RULES.filter((r) => r.promise).map((r) => r.id)).toEqual(["no-peeking", "score", "record", "link"]);
     for (const r of FIXED_RULES) if (r.promise) expect(text0).not.toContain(r.promise);
 
     const text = buildInstructions("Short and strict.");
-    expect(text).toContain(`10. ${byId.link!.rule}`);
+    expect(text).toContain(`9. ${byId.link!.rule}`);
     for (const r of FIXED_RULES) expect(text).not.toContain(r.title);
     expect(text).toContain("never change a score or the fade clock");
     expect(text).not.toMatch(/Forward Deployed|FDE|buzzword|interview/i);

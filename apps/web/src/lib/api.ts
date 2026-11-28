@@ -109,7 +109,7 @@ export function createApi(getToken: TokenSource, mode: AppConfig["authMode"]) {
     renameDeck: (id: string, name: string) => call<DeckView>(`/api/decks/${id}`, { method: "PATCH", body: { name } }),
     /** Deletes the deck and every topic in it. */
     deleteDeck: (id: string) => call<{ deleted: { name: string; topicCount: number } }>(`/api/decks/${id}`, { method: "DELETE" }),
-    updateTopic: (id: string, body: { importance?: string; explanation?: string; understanding?: string }) =>
+    updateTopic: (id: string, body: { importance?: string; explanation?: string }) =>
       call<TopicView>(`/api/topics/${id}`, { method: "PATCH", body }),
     setScore: (id: string, score: number) => call<TopicView>(`/api/topics/${id}/score`, { method: "PUT", body: { score } }),
     deleteTopic: (id: string) => call<{ deleted: { term: string } }>(`/api/topics/${id}`, { method: "DELETE" }),

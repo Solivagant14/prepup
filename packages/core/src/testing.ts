@@ -51,17 +51,10 @@ export const FIXED_RULES: FixedRule[] = [
     why: "Seeing your own notes first would make the test meaningless.",
   },
   {
-    id: "level",
-    title: "Questions match the topic's understanding level",
-    promise: "You're asked at the level you're on: Beginner, Intermediate or Advanced.",
-    rule: "Ask at the topic's understanding level (list_topics and get_topic show it). Beginner: what it is, why it matters, a simple example. Intermediate: how it works, when to use it, trade-offs, applying it to a problem. Advanced: edge cases, internals, design decisions, comparing it with alternatives. The score you suggest is for that level.",
-    why: "A score means how well you know the topic at your level, and the questions get harder as you move up.",
-  },
-  {
     id: "score",
     title: "Short feedback, then a suggested score",
     promise: "A 5 always means you can explain it clearly.",
-    rule: "After their answer, give short feedback (what was right, what was missing) and suggest a score from 1 to 5 with a one-line reason. 1-4 is how well they understand it at its level; suggest 5 only if they explained it clearly in their own words at that level.",
+    rule: "After their answer, give short feedback (what was right, what was missing) and suggest a score from 1 to 5 with a one-line reason. 1-4 is how well they understand it; suggest 5 only if they explained it clearly in their own words.",
     why: "So a top score means the same thing for everyone, whatever your testing style.",
   },
   {
@@ -138,7 +131,6 @@ export function buildInstructions(style: string): string {
     "PrepUp tracks the topics the user is learning.",
     "Each topic has a score from 1 to 5: 1-4 is how well they understand it and can answer questions; 5 means they can explain it clearly. A topic that has never been tested shows 0 (not tested yet); a test always records 1 to 5.",
     "Scores fade one step every 14 days unless the topic is tested again.",
-    "Understanding levels: every topic is at Beginner, Intermediate or Advanced, and has a separate 0-5 score at each level. New topics start at Beginner. A test is at the topic's current level; a confirmed 5 moves it up one level automatically (record_review says so), where it starts at 0. Only the user changes a level otherwise, on the topic's card.",
     "",
     "Capturing: when the user mentions a term they want to learn, call add_topic. It is safe to call twice; duplicates merge.",
     'Topics can build on other topics ("RAG builds on Embeddings"). Links map the deck; they never change a score or the fade clock.',

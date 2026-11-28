@@ -3,7 +3,7 @@
  * for local experiments; behaves like the Postgres adapter.
  */
 import { randomUUID } from "node:crypto";
-import { UNDERSTANDING_LEVELS, type Importance, type ShownScore, type Understanding } from "@prepup/contracts";
+import type { Importance, Score } from "@prepup/contracts";
 import type { LinkPair } from "./links.js";
 import type {
   ChangeSet,
@@ -20,7 +20,7 @@ export class InMemoryRepository implements PrepUpRepository {
   private workspaces = new Map<string, string>(); // owner userId -> workspaceId
   private decks: DeckRecord[] = [];
   private topics: TopicRecord[] = [];
-  private settings = new Map<string, { importance: Importance; explanation: string; understanding: Understanding }>();
+  private settings = new Map<string, { importance: Importance; explanation: string }>();
   private events: EventRecord[] = [];
   private styles = new Map<string, { text: string; updatedAt: Date }>();
   private autoLinks = new Map<string, boolean>();
@@ -110,7 +110,6 @@ export class InMemoryRepository implements PrepUpRepository {
     for (const e of events) {
       if (e.score !== null && (e.score < 0 || e.score > 5)) throw new Error("score out of range");
       if (e.score === 0 && e.kind !== "manual_edit") throw new Error("only a manual edit can set 0");
-      if ((e.kind === "explanation") !== (e.understanding === null)) throw new Error("a score needs its level");
       if (e.kind === "claude_test" && e.score === 5 && !e.explained) throw new Error("unearned 5");
     }
     if (settings) this.upsertSettings(settings.userId, settings.topicId, settings.patch);
@@ -119,11 +118,7 @@ export class InMemoryRepository implements PrepUpRepository {
 
   private upsertSettings(userId: string, topicId: string, patch: SettingsPatch) {
     const key = `${userId}:${topicId}`;
-    const current = this.settings.get(key) ?? {
-      importance: "medium" as Importance,
-      explanation: "",
-      understanding: "beginner" as Understanding,
-    };
+    const current = this.settings.get(key) ?? { importance: "medium" as Importance, explanation: "" };
     this.settings.set(key, { ...current, ...patch });
   }
 
@@ -225,21 +220,15 @@ export class InMemoryRepository implements PrepUpRepository {
     const mine = this.events
       .filter((e) => e.topicId === t.id && e.userId === userId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const scored = mine.filter((e) => e.score !== null).at(-1);
+    const tested = mine.filter((e) => e.kind === "claude_test").at(-1);
     const explainedAt = mine.filter((e) => e.kind === "explanation").at(-1);
-    const facts = (level: Understanding) => {
-      const at = mine.filter((e) => e.understanding === level);
-      const scored = at.filter((e) => e.score !== null).at(-1);
-      return {
-        lastScore: scored ? { score: scored.score as ShownScore, at: scored.createdAt } : null,
-        lastTestAt: at.filter((e) => e.kind === "claude_test").at(-1)?.createdAt ?? null,
-      };
-    };
     return {
       topic: t,
       importance: s?.importance ?? "medium",
       explanation: s?.explanation ?? "",
-      understanding: s?.understanding ?? "beginner",
-      levels: Object.fromEntries(UNDERSTANDING_LEVELS.map((l) => [l, facts(l)])) as TopicState["levels"],
+      lastScore: scored ? { score: scored.score as Score, at: scored.createdAt } : null,
+      lastTestAt: tested?.createdAt ?? null,
       lastExplanation: explainedAt ? { at: explainedAt.createdAt, source: explainedAt.source } : null,
     };
   }
